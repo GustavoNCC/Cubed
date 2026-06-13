@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use cubed_domain::entities::{ServerSoftware, ServerStatus};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
-use cubed_application::ports::ServerRepository;
+use cubed_application::ports::{ConsoleLine, ConsoleManager, FileSystemManager, ServerRepository};
+use cubed_infrastructure::MinecraftConsoleManager;
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -29,23 +30,29 @@ pub struct CreateServerCmd {
     pub servers_dir: String,
 }
 
+/// Evento emitido al frontend por cada línea de consola.
+#[derive(Serialize, Clone)]
+pub struct ConsoleLineEvent {
+    pub server_id: String,
+    pub is_stdout: bool,
+    pub text: String,
+}
+
 // ── App state ─────────────────────────────────────────────────────────────────
 
 pub struct AppState {
-    pub repo: Arc<dyn ServerRepository>,
-    pub fs: Arc<dyn cubed_application::ports::FileSystemManager>,
+    pub repo:    Arc<dyn ServerRepository>,
+    pub fs:      Arc<dyn FileSystemManager>,
+    pub console: Arc<MinecraftConsoleManager>,
 }
 
-// ── Commands ──────────────────────────────────────────────────────────────────
+// ── Server commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn list_servers(state: State<'_, AppState>) -> Result<Vec<ServerDto>, String> {
-    state
-        .repo
-        .find_all()
-        .await
+    state.repo.find_all().await
         .map_err(|e| e.to_string())
-        .map(|servers| servers.iter().map(server_to_dto).collect())
+        .map(|v| v.iter().map(server_to_dto).collect())
 }
 
 #[tauri::command]
@@ -54,33 +61,24 @@ pub async fn create_server(
     state: State<'_, AppState>,
 ) -> Result<ServerDto, String> {
     let software = parse_software(&cmd.software)?;
-
     let uc = CreateServer::new(state.repo.clone(), state.fs.clone());
-    let server = uc
-        .execute(CreateServerInput {
-            name: cmd.name,
-            version: cmd.version,
-            software,
-            port: cmd.port,
-            java_path: cmd.java_path,
-            servers_dir: cmd.servers_dir,
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-
+    let server = uc.execute(CreateServerInput {
+        name: cmd.name,
+        version: cmd.version,
+        software,
+        port: cmd.port,
+        java_path: cmd.java_path,
+        servers_dir: cmd.servers_dir,
+    }).await.map_err(|e| e.to_string())?;
     Ok(server_to_dto(&server))
 }
 
 #[tauri::command]
 pub async fn start_server(id: String, state: State<'_, AppState>) -> Result<ServerDto, String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    let mut server = state
-        .repo
-        .find_by_id(uuid)
-        .await
+    let mut server = state.repo.find_by_id(uuid).await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
-
     server.start().map_err(|e| e.to_string())?;
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
     Ok(server_to_dto(&server))
@@ -89,13 +87,9 @@ pub async fn start_server(id: String, state: State<'_, AppState>) -> Result<Serv
 #[tauri::command]
 pub async fn stop_server(id: String, state: State<'_, AppState>) -> Result<ServerDto, String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    let mut server = state
-        .repo
-        .find_by_id(uuid)
-        .await
+    let mut server = state.repo.find_by_id(uuid).await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
-
     server.stop().map_err(|e| e.to_string())?;
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
     Ok(server_to_dto(&server))
@@ -104,19 +98,70 @@ pub async fn stop_server(id: String, state: State<'_, AppState>) -> Result<Serve
 #[tauri::command]
 pub async fn delete_server(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-
-    let server = state
-        .repo
-        .find_by_id(uuid)
-        .await
+    let server = state.repo.find_by_id(uuid).await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
-
     if server.is_running() {
         return Err("No se puede eliminar un servidor en ejecución".into());
     }
-
     state.repo.delete(uuid).await.map_err(|e| e.to_string())
+}
+
+// ── Console commands ──────────────────────────────────────────────────────────
+
+/// Suscribe el frontend a la consola de un servidor.
+/// Las líneas nuevas se emitirán como eventos Tauri "console-line:<server_id>".
+/// Las líneas históricas del buffer también se replayan inmediatamente.
+#[tauri::command]
+pub async fn subscribe_console(
+    id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<ConsoleLineEvent>, String> {
+    let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    let event_name = format!("console-line:{}", id);
+    let app_clone = app.clone();
+    let event_clone = event_name.clone();
+
+    state.console
+        .attach(uuid, Box::new(move |line: ConsoleLine| {
+            let evt = ConsoleLineEvent {
+                server_id: line.server_id.to_string(),
+                is_stdout: line.is_stdout,
+                text: line.text,
+            };
+            app_clone.emit(&event_clone, evt).ok();
+        }))
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Return current buffer snapshot for immediate display
+    Ok(state.console.tail(uuid, 500).into_iter().map(line_to_event).collect())
+}
+
+/// Envía un comando a stdin del servidor.
+#[tauri::command]
+pub async fn send_console_command(
+    id: String,
+    command: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    state.console
+        .send_command(uuid, &command)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Devuelve las últimas N líneas del buffer sin suscribirse.
+#[tauri::command]
+pub async fn get_console_tail(
+    id: String,
+    n: usize,
+    state: State<'_, AppState>,
+) -> Result<Vec<ConsoleLineEvent>, String> {
+    let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    Ok(state.console.tail(uuid, n).into_iter().map(line_to_event).collect())
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -134,9 +179,12 @@ fn server_to_dto(s: &cubed_domain::entities::Server) -> ServerDto {
             ServerStatus::Running  => "running",
             ServerStatus::Stopping => "stopping",
             ServerStatus::Crashed  => "crashed",
-        }
-        .to_string(),
+        }.to_string(),
     }
+}
+
+fn line_to_event(l: ConsoleLine) -> ConsoleLineEvent {
+    ConsoleLineEvent { server_id: l.server_id.to_string(), is_stdout: l.is_stdout, text: l.text }
 }
 
 fn parse_software(s: &str) -> Result<ServerSoftware, String> {

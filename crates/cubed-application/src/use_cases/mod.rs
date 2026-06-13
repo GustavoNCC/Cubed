@@ -7,6 +7,7 @@ pub mod reserve_port;
 pub mod restart_server;
 pub mod run_server;
 pub mod select_java;
+pub mod server_console;
 pub mod start_server;
 pub mod stop_server;
 
@@ -19,5 +20,6 @@ pub use reserve_port::ReservePort;
 pub use restart_server::RestartServer;
 pub use run_server::{RunServer, RunServerInput};
 pub use select_java::SelectJava;
+pub use server_console::ServerConsole;
 pub use start_server::StartServer;
 pub use stop_server::StopServer;

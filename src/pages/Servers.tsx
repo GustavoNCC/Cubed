@@ -11,9 +11,10 @@ interface Props {
   onStop: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onCreate: (form: CreateServerForm) => Promise<void>;
+  onConsole: (server: Server) => void;
 }
 
-export function Servers({ servers, onRefresh: _onRefresh, onStart, onStop, onDelete, onCreate }: Props) {
+export function Servers({ servers, onRefresh: _onRefresh, onStart, onStop, onDelete, onCreate, onConsole }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
@@ -48,6 +49,7 @@ export function Servers({ servers, onRefresh: _onRefresh, onStart, onStop, onDel
               onStart={(id) => withLoading(id, () => onStart(id))}
               onStop={(id) => withLoading(id, () => onStop(id))}
               onDelete={(id) => withLoading(id, () => onDelete(id))}
+              onConsole={() => onConsole(s)}
             />
           ))}
         </div>

@@ -6,6 +6,35 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.9.0] — Fase 9: Console Manager
+
+### Added
+- **Puerto `ConsoleManager`** (`cubed-application/src/ports/console.rs`):
+  - `ConsoleLine { server_id, is_stdout, text }`.
+  - `ConsoleCallback` — closure enviable entre hilos.
+  - Trait `ConsoleManager` con `attach`, `send_command`, `tail`.
+- **`MinecraftConsoleManager`** (`cubed-infrastructure/src/console/`):
+  - Buffer circular de 500 líneas (`VecDeque<ConsoleLine>`) por servidor.
+  - `spawn_readers` — dos tareas `tokio` que leen stdout/stderr línea a línea.
+  - `register_stdin` — almacena `ChildStdin` para escritura posterior.
+  - `attach` — instala callback y replaya el buffer histórico al nuevo suscriptor.
+  - `tail` — acceso síncrono al buffer con `try_lock`.
+- **3 comandos Tauri nuevos** (`src-tauri/src/commands.rs`):
+  - `subscribe_console` — adjunta callback de Tauri events (`console-line:<id>`) y devuelve el histórico.
+  - `send_console_command` — escribe a stdin del proceso.
+  - `get_console_tail` — últimas N líneas sin suscripción.
+- **Frontend — `Console.tsx`** (`src/pages/Console.tsx`):
+  - Terminal oscura con salida stdout (zinc-200) y stderr (amarillo).
+  - Suscripción en tiempo real vía `@tauri-apps/api/event`.
+  - Historial de 1000 líneas en memoria; auto-scroll al final.
+  - Input de comandos con envío por `Enter` o botón.
+  - Botón "Volver" para regresar a la lista de servidores.
+- **Botón "Consola"** añadido a `ServerCard` (siempre habilitado).
+- **Navegación** actualizada en `App.tsx` para mostrar `Console` cuando se selecciona un servidor.
+
+### Tests
+- 37 tests pasando (`cargo test`). Build frontend: ✓ (186 KB JS gzip: 59 KB).
+
 ## [0.8.0] — Fase 8: Frontend Base
 
 ### Added

@@ -3,13 +3,15 @@ import { Sidebar, type Page } from "./components/Sidebar";
 import { Dashboard } from "./pages/Dashboard";
 import { Servers } from "./pages/Servers";
 import { Settings } from "./pages/Settings";
+import { Console } from "./pages/Console";
 import { api } from "./api";
 import type { Server, CreateServerForm } from "./types";
 
 function App() {
-  const [page, setPage]       = useState<Page>("dashboard");
-  const [servers, setServers] = useState<Server[]>([]);
-  const [error, setError]     = useState<string | null>(null);
+  const [page, setPage]             = useState<Page>("dashboard");
+  const [servers, setServers]       = useState<Server[]>([]);
+  const [error, setError]           = useState<string | null>(null);
+  const [consoleServer, setConsole] = useState<Server | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -54,7 +56,7 @@ function App() {
         )}
 
         {page === "dashboard" && <Dashboard servers={servers} />}
-        {page === "servers" && (
+        {page === "servers" && !consoleServer && (
           <Servers
             servers={servers}
             onRefresh={refresh}
@@ -62,7 +64,11 @@ function App() {
             onStop={handleStop}
             onDelete={handleDelete}
             onCreate={handleCreate}
+            onConsole={setConsole}
           />
+        )}
+        {page === "servers" && consoleServer && (
+          <Console server={consoleServer} onBack={() => setConsole(null)} />
         )}
         {page === "settings" && <Settings />}
       </main>

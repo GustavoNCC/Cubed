@@ -5,6 +5,7 @@
 //! Implementa los puertos definidos en cubed-application hablando con
 //! el mundo real: PostgreSQL (SQLx), sistema de archivos, procesos, etc.
 
+pub mod console;
 pub mod downloader;
 pub mod fs;
 pub mod java;
@@ -12,6 +13,7 @@ pub mod persistence;
 pub mod port;
 pub mod process;
 
+pub use console::MinecraftConsoleManager;
 pub use downloader::HttpDownloader;
 pub use fs::LocalFileSystem;
 pub use java::SystemJavaManager;
