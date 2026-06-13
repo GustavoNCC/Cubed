@@ -1,21 +1,31 @@
-//! Punto de ensamblaje (composition root) de Cubed.
-//!
-//! Aquí se conectan las capas de Clean Architecture y se registran los
-//! comandos Tauri expuestos al frontend. En la Fase 0 solo se expone un
-//! comando de salud para verificar el puente Frontend <-> Backend.
+mod commands;
+mod in_memory_repo;
 
-/// Comando de diagnóstico: confirma que el backend Rust responde.
+use std::sync::Arc;
+use commands::AppState;
+use cubed_infrastructure::LocalFileSystem;
+
 #[tauri::command]
 fn health_check() -> String {
     format!("Cubed backend OK (domain v{})", cubed_domain::DOMAIN_VERSION)
 }
 
-/// Arranca la aplicación Tauri.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let repo = in_memory_repo::InMemoryServerRepo::new();
+    let fs   = Arc::new(LocalFileSystem::new("/tmp/cubed-dev"));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![health_check])
+        .manage(AppState { repo, fs })
+        .invoke_handler(tauri::generate_handler![
+            health_check,
+            commands::list_servers,
+            commands::create_server,
+            commands::start_server,
+            commands::stop_server,
+            commands::delete_server,
+        ])
         .run(tauri::generate_context!())
         .expect("error al iniciar la aplicación Cubed");
 }

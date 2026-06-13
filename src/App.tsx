@@ -1,41 +1,72 @@
-import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { cn } from "@/lib/utils";
+import { useEffect, useState, useCallback } from "react";
+import { Sidebar, type Page } from "./components/Sidebar";
+import { Dashboard } from "./pages/Dashboard";
+import { Servers } from "./pages/Servers";
+import { Settings } from "./pages/Settings";
+import { api } from "./api";
+import type { Server, CreateServerForm } from "./types";
 
-/**
- * Fase 0 — App vacía que verifica el puente Frontend <-> Backend (Tauri).
- * El dashboard real llega en la Fase 8.
- */
 function App() {
-  const [status, setStatus] = useState<string>("conectando…");
-  const [healthy, setHealthy] = useState<boolean>(false);
+  const [page, setPage]       = useState<Page>("dashboard");
+  const [servers, setServers] = useState<Server[]>([]);
+  const [error, setError]     = useState<string | null>(null);
 
-  useEffect(() => {
-    invoke<string>("health_check")
-      .then((msg) => {
-        setStatus(msg);
-        setHealthy(true);
-      })
-      .catch(() => setStatus("backend no disponible (¿corriendo fuera de Tauri?)"));
+  const refresh = useCallback(async () => {
+    try {
+      setServers(await api.listServers());
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
   }, []);
 
+  useEffect(() => { refresh(); }, [refresh]);
+
+  async function handleCreate(form: CreateServerForm) {
+    const server = await api.createServer(form);
+    setServers((prev) => [...prev, server]);
+  }
+
+  async function handleStart(id: string) {
+    const updated = await api.startServer(id);
+    setServers((prev) => prev.map((s) => s.id === id ? updated : s));
+  }
+
+  async function handleStop(id: string) {
+    const updated = await api.stopServer(id);
+    setServers((prev) => prev.map((s) => s.id === id ? updated : s));
+  }
+
+  async function handleDelete(id: string) {
+    await api.deleteServer(id);
+    setServers((prev) => prev.filter((s) => s.id !== id));
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground gap-4">
-      <h1 className="text-4xl font-bold tracking-tight">Cubed</h1>
-      <p className="text-muted-foreground">
-        Administrador local de servidores Minecraft · Fase 0
-      </p>
-      <div
-        className={cn(
-          "rounded-md border px-4 py-2 text-sm",
-          healthy
-            ? "border-primary text-primary"
-            : "border-border text-muted-foreground",
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      <Sidebar current={page} onChange={setPage} />
+
+      <main className="flex-1 overflow-y-auto p-6">
+        {error && (
+          <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            {error}
+          </div>
         )}
-      >
-        {status}
-      </div>
-    </main>
+
+        {page === "dashboard" && <Dashboard servers={servers} />}
+        {page === "servers" && (
+          <Servers
+            servers={servers}
+            onRefresh={refresh}
+            onStart={handleStart}
+            onStop={handleStop}
+            onDelete={handleDelete}
+            onCreate={handleCreate}
+          />
+        )}
+        {page === "settings" && <Settings />}
+      </main>
+    </div>
   );
 }
 

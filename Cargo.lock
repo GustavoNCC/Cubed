@@ -591,6 +591,7 @@ dependencies = [
 name = "cubed"
 version = "0.0.0"
 dependencies = [
+ "async-trait",
  "cubed-application",
  "cubed-domain",
  "cubed-infrastructure",
@@ -599,6 +600,8 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-shell",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

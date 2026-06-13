@@ -6,6 +6,27 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.8.0] — Fase 8: Frontend Base
+
+### Added
+- **Comandos Tauri** (`src-tauri/src/commands.rs`):
+  - `list_servers`, `create_server`, `start_server`, `stop_server`, `delete_server`.
+  - `AppState` con `ServerRepository` + `FileSystemManager` inyectados.
+- **`InMemoryServerRepo`** en `src-tauri` — repositorio en RAM para desarrollo sin PostgreSQL.
+- **`api.ts`** — capa de acceso al backend: todas las llamadas `invoke` centralizadas.
+- **Sidebar** con navegación entre Dashboard, Servidores y Configuración.
+- **Página Dashboard** — tarjetas de estadísticas (total, activos, offline, caídos) + tabla de actividad reciente.
+- **Página Servidores** — grid de `ServerCard` con acciones Iniciar/Detener/Eliminar; modal de creación con validación.
+- **Página Configuración** — vista de los valores por defecto de `Settings`.
+- **`StatusBadge`** — badge de estado con colores por estado del servidor.
+- **`CreateServerModal`** — formulario completo (nombre, versión, software, puerto, Java, directorio).
+- Token CSS `--destructive` y clase utilitaria `.input` en `index.css`.
+- Tailwind: color `destructive` añadido.
+- TypeScript: sin errores (`tsc --noEmit`). Build de producción: ✓ (181 KB JS gzip: 57 KB).
+
+### Resultado
+Primera versión visual utilizable.
+
 ## [0.7.0] — Fase 7: Server Manager
 
 ### Added
