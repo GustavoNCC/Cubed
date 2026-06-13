@@ -6,6 +6,23 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.4.0] — Fase 4: Java Manager
+
+### Added
+- **Puerto `JavaManager`** (`cubed-application/ports/java_manager.rs`) — `detect_installations`, `inspect`, `validate_compatibility`, `select_for_version`.
+- **`JavaInstallation`** — struct con `path`, `major_version` y `version_string`.
+- **`SystemJavaManager`** (`cubed-infrastructure/java/`) — implementación real:
+  - Sondea candidatos estáticos (Ubuntu + macOS Homebrew), `which java` y `$JAVA_HOME`.
+  - Parsea la salida de `java -version` (stderr) incluyendo el formato legacy `"1.8.x"`.
+  - Ordena por versión descendente; `select_for_version` elige la mínima compatible.
+- **Tabla de compatibilidad** Minecraft → Java mínimo:
+  - `< 1.17` → Java 8 | `1.17.x` → 16 | `1.18–1.20.4` → 17 | `≥ 1.20.5` → 21.
+- **`SelectJava`** — caso de uso con `list`, `for_version` e `inspect_and_validate`.
+- 11 tests unitarios para parsing de versión, tabla de compatibilidad, validación y detección.
+
+### Resultado
+Cubed sabe si puede ejecutar Minecraft antes de intentar arrancar un servidor.
+
 ## [0.3.0] — Fase 3: File System Manager
 
 ### Added

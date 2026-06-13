@@ -6,7 +6,9 @@
 //! el mundo real: PostgreSQL (SQLx), sistema de archivos, procesos, etc.
 
 pub mod fs;
+pub mod java;
 pub mod persistence;
 
 pub use fs::LocalFileSystem;
+pub use java::SystemJavaManager;
 pub use persistence::{connect, PostgresServerRepository};
