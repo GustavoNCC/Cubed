@@ -16,8 +16,10 @@ mod tests {
     use async_trait::async_trait;
     use cubed_domain::entities::{Server, ServerSoftware};
     use crate::error::ApplicationResult;
-    use crate::ports::ServerRepository;
+    use crate::ports::{FileSystemManager, ServerRepository};
     use crate::use_cases::{CreateServer, CreateServerInput};
+
+    // --- Stubs ---
 
     struct InMemoryServerRepo {
         inner: std::sync::Mutex<Vec<Server>>,
@@ -37,29 +39,42 @@ mod tests {
             data.push(server.clone());
             Ok(())
         }
-
         async fn find_by_id(&self, id: Uuid) -> ApplicationResult<Option<Server>> {
             Ok(self.inner.lock().unwrap().iter().find(|s| s.id() == id).cloned())
         }
-
         async fn find_all(&self) -> ApplicationResult<Vec<Server>> {
             Ok(self.inner.lock().unwrap().clone())
         }
-
         async fn delete(&self, id: Uuid) -> ApplicationResult<()> {
             self.inner.lock().unwrap().retain(|s| s.id() != id);
             Ok(())
         }
-
         async fn port_in_use(&self, port: u16) -> ApplicationResult<bool> {
             Ok(self.inner.lock().unwrap().iter().any(|s| s.port().value() == port))
         }
     }
 
+    struct NoopFs;
+
+    #[async_trait]
+    impl FileSystemManager for NoopFs {
+        async fn init_cubed_dirs(&self) -> ApplicationResult<()> { Ok(()) }
+        async fn init_server_dirs(&self, _: &str, _: &str) -> ApplicationResult<()> { Ok(()) }
+        async fn delete_server_dir(&self, _: &str, _: &str) -> ApplicationResult<()> { Ok(()) }
+        fn server_dir(&self, servers_dir: &str, name: &str) -> String {
+            format!("{}/{}", servers_dir, name)
+        }
+        async fn ensure_writable(&self, _: &str) -> ApplicationResult<()> { Ok(()) }
+    }
+
+    fn make_fs() -> Arc<NoopFs> { Arc::new(NoopFs) }
+
+    // --- Tests ---
+
     #[tokio::test]
     async fn create_server_persists() {
         let repo = InMemoryServerRepo::new();
-        let uc = CreateServer::new(repo.clone());
+        let uc = CreateServer::new(repo.clone(), make_fs());
 
         let server = uc.execute(CreateServerInput {
             name: "survival".into(),
@@ -67,16 +82,16 @@ mod tests {
             software: ServerSoftware::Paper,
             port: 25565,
             java_path: "/usr/bin/java".into(),
+            servers_dir: "/cubed/servers".into(),
         }).await.unwrap();
 
-        let found = repo.find_by_id(server.id()).await.unwrap();
-        assert!(found.is_some());
+        assert!(repo.find_by_id(server.id()).await.unwrap().is_some());
     }
 
     #[tokio::test]
     async fn duplicate_port_rejected() {
         let repo = InMemoryServerRepo::new();
-        let uc = CreateServer::new(repo.clone());
+        let uc = CreateServer::new(repo.clone(), make_fs());
 
         uc.execute(CreateServerInput {
             name: "srv1".into(),
@@ -84,6 +99,7 @@ mod tests {
             software: ServerSoftware::Paper,
             port: 25565,
             java_path: "/usr/bin/java".into(),
+            servers_dir: "/cubed/servers".into(),
         }).await.unwrap();
 
         let result = uc.execute(CreateServerInput {
@@ -92,6 +108,7 @@ mod tests {
             software: ServerSoftware::Purpur,
             port: 25565,
             java_path: "/usr/bin/java".into(),
+            servers_dir: "/cubed/servers".into(),
         }).await;
 
         assert!(result.is_err());

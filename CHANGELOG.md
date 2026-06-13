@@ -6,6 +6,23 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.3.0] — Fase 3: File System Manager
+
+### Added
+- **Puerto `FileSystemManager`** (`cubed-application/ports/file_system.rs`) — trait async con `init_cubed_dirs`, `init_server_dirs`, `delete_server_dir`, `server_dir`, `ensure_writable`.
+- **`LocalFileSystem`** (`cubed-infrastructure/fs/`) — implementación real sobre el FS local:
+  - `init_cubed_dirs` → crea `/home/cubed/{servers,backups,downloads,temp,config,logs}`.
+  - `init_server_dirs` → crea `<servers_dir>/<name>/{mods,world,config,logs}`.
+  - `delete_server_dir` → elimina el árbol del servidor (no falla si no existe).
+  - `ensure_writable` → valida acceso de escritura.
+- **`InitFileSystem`** — caso de uso para inicializar la estructura global al arrancar.
+- `CreateServer` ahora también crea el directorio del servidor tras persistirlo.
+- `DeleteServer` ahora también elimina el directorio del servidor antes de borrar el registro.
+- 5 tests unitarios en `LocalFileSystem` usando directorios temporales (`tempfile`).
+
+### Resultado
+Cubed puede generar servidores físicamente en disco.
+
 ## [0.2.0] — Fase 2: Persistencia
 
 ### Added
