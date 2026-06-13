@@ -6,6 +6,23 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.6.0] — Fase 6: Downloader Manager
+
+### Added
+- **Puerto `Downloader`** (`cubed-application/ports/downloader.rs`) — `download`, `build_url`; devuelve `DownloadedJar` con ruta y tamaño.
+- **`HttpDownloader`** (`cubed-infrastructure/downloader/`) — descarga con streaming chunk-a-chunk via `reqwest` + `futures-util`.
+- **`url_builder`** — resolución de URLs por software:
+  - **Paper**: consulta `api.papermc.io/v2` → último build → URL de descarga directa.
+  - **Purpur**: URL estática `api.purpurmc.org/v2/purpur/{mc}/latest/download`.
+  - **Fabric**: consulta `meta.fabricmc.net` → último loader + último installer → URL server jar.
+  - **Forge**: consulta `promotions_slim.json` de Forge Maven → versión recomendada o latest.
+  - **NeoForge**: consulta Maven de NeoForge filtrando por `{minor}.{patch}.*`.
+- **`DownloadServerJar`** — caso de uso con `execute` y `preview_url`.
+- 5 tests unitarios (formato JAR name, URLs estáticas, distinción red/sin-red).
+
+### Resultado
+Cubed crea servidores sin descargas manuales.
+
 ## [0.5.0] — Fase 5: Port Manager
 
 ### Added
