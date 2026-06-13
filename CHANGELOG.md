@@ -6,6 +6,20 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.5.0] — Fase 5: Port Manager
+
+### Added
+- **Puerto `PortManager`** (`cubed-application/ports/port_manager.rs`) — `is_free`, `find_free_from`, `validate`.
+- **`TcpPortManager`** (`cubed-infrastructure/port/`) — implementación real vía `TcpListener::bind`:
+  - `is_free` intenta bind en `0.0.0.0:<port>` para detectar si está ocupado por el SO.
+  - `find_free_from` itera desde `start` hasta 65535 buscando el primer puerto libre.
+  - `validate` rechaza puertos < 1024 y puertos ocupados por el SO.
+- **`ReservePort`** — caso de uso que combina validación de red + validación de BD (sin duplicados entre servidores de Cubed); también ofrece `suggest_free` para autocompletar.
+- 6 tests con puertos reales (ocupar con `TcpListener::bind("0.0.0.0:0")` y verificar detección).
+
+### Resultado
+No se pueden crear servidores con puertos duplicados ni ocupados por el sistema.
+
 ## [0.4.0] — Fase 4: Java Manager
 
 ### Added
