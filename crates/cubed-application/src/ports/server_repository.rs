@@ -1,7 +1,7 @@
-use async_trait::async_trait;
-use uuid::Uuid;
-use cubed_domain::entities::Server;
 use crate::error::ApplicationResult;
+use async_trait::async_trait;
+use cubed_domain::entities::Server;
+use uuid::Uuid;
 
 /// Puerto de persistencia para servidores. La infraestructura lo implementa.
 #[async_trait]

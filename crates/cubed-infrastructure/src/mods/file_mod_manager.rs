@@ -11,7 +11,7 @@ use cubed_domain::entities::ModEntry;
 /// Gestiona la instalación física de mods (.jar) en el directorio mods/ de un servidor.
 pub struct FileModManager {
     servers: Arc<dyn ServerRepository>,
-    repo:    Arc<dyn ModRepository>,
+    repo: Arc<dyn ModRepository>,
 }
 
 impl FileModManager {
@@ -27,9 +27,10 @@ impl FileModManager {
 
         // JAR/ZIP magic bytes: PK\x03\x04
         if bytes.len() < 4 || &bytes[0..4] != b"PK\x03\x04" {
-            return Err(ApplicationError::Infrastructure(
-                format!("'{}' no es un archivo JAR válido (cabecera inválida)", source_path),
-            ));
+            return Err(ApplicationError::Infrastructure(format!(
+                "'{}' no es un archivo JAR válido (cabecera inválida)",
+                source_path
+            )));
         }
         Ok(())
     }
@@ -44,15 +45,16 @@ impl FileModManager {
         let file_name = Path::new(source_path)
             .file_name()
             .and_then(|n| n.to_str())
-            .ok_or_else(|| ApplicationError::Infrastructure(
-                format!("Ruta inválida: '{}'", source_path),
-            ))?
+            .ok_or_else(|| {
+                ApplicationError::Infrastructure(format!("Ruta inválida: '{}'", source_path))
+            })?
             .to_string();
 
         if !file_name.ends_with(".jar") {
-            return Err(ApplicationError::Infrastructure(
-                format!("'{}' no es un archivo .jar", file_name),
-            ));
+            return Err(ApplicationError::Infrastructure(format!(
+                "'{}' no es un archivo .jar",
+                file_name
+            )));
         }
 
         // Validate JAR magic bytes
@@ -64,12 +66,17 @@ impl FileModManager {
         })?;
 
         let dest = format!("{}/{}", mods_dir, file_name);
-        fs::copy(source_path, &dest).await.map_err(|e| {
-            ApplicationError::Infrastructure(format!("Error copiando mod: {}", e))
-        })?;
+        fs::copy(source_path, &dest)
+            .await
+            .map_err(|e| ApplicationError::Infrastructure(format!("Error copiando mod: {}", e)))?;
 
         let uc = AddMod::new(self.servers.clone(), self.repo.clone());
-        uc.execute(AddModInput { server_id, file_name, path: dest }).await
+        uc.execute(AddModInput {
+            server_id,
+            file_name,
+            path: dest,
+        })
+        .await
     }
 
     /// Lista los mods registrados para un servidor.
@@ -96,9 +103,9 @@ mod tests {
     use super::*;
     use crate::mods::InMemoryModRepo;
     use crate::persistence::InMemoryServerRepo;
+    use cubed_domain::entities::Server;
     use cubed_domain::entities::ServerSoftware;
     use cubed_domain::value_objects::{JavaPath, ServerName, ServerPort, ServerVersion};
-    use cubed_domain::entities::Server;
 
     fn make_server() -> Server {
         Server::new(
@@ -112,8 +119,8 @@ mod tests {
 
     #[tokio::test]
     async fn validate_jar_rejects_plain_text() {
-        use tempfile::NamedTempFile;
         use std::io::Write;
+        use tempfile::NamedTempFile;
         let mut f = NamedTempFile::with_suffix(".jar").unwrap();
         f.write_all(b"not a jar").unwrap();
         let result = FileModManager::validate_jar(f.path().to_str().unwrap()).await;

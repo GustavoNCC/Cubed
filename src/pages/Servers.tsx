@@ -17,13 +17,28 @@ interface Props {
   onModpacks: (server: Server) => void;
 }
 
-export function Servers({ servers, onRefresh: _onRefresh, onStart, onStop, onDelete, onCreate, onConsole, onBackups, onMods, onModpacks }: Props) {
+export function Servers({
+  servers,
+  onRefresh: _onRefresh,
+  onStart,
+  onStop,
+  onDelete,
+  onCreate,
+  onConsole,
+  onBackups,
+  onMods,
+  onModpacks,
+}: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   async function withLoading(id: string, fn: () => Promise<void>) {
     setLoadingId(id);
-    try { await fn(); } finally { setLoadingId(null); }
+    try {
+      await fn();
+    } finally {
+      setLoadingId(null);
+    }
   }
 
   return (
@@ -40,7 +55,9 @@ export function Servers({ servers, onRefresh: _onRefresh, onStart, onStop, onDel
 
       {servers.length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
-          <p className="text-sm">Sin servidores. Crea uno pulsando <strong>Nuevo</strong>.</p>
+          <p className="text-sm">
+            Sin servidores. Crea uno pulsando <strong>Nuevo</strong>.
+          </p>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

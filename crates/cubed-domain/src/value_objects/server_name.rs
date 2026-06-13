@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::error::{DomainError, DomainResult};
+use serde::{Deserialize, Serialize};
 
 /// Nombre válido de servidor (1-64 caracteres, sin espacios).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -21,7 +21,9 @@ impl ServerName {
         Ok(Self(value))
     }
 
-    pub fn as_str(&self) -> &str { &self.0 }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl std::fmt::Display for ServerName {
@@ -35,11 +37,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn valid_name() { assert!(ServerName::new("survival").is_ok()); }
+    fn valid_name() {
+        assert!(ServerName::new("survival").is_ok());
+    }
     #[test]
-    fn empty_name_fails() { assert!(ServerName::new("").is_err()); }
+    fn empty_name_fails() {
+        assert!(ServerName::new("").is_err());
+    }
     #[test]
-    fn name_with_spaces_fails() { assert!(ServerName::new("my server").is_err()); }
+    fn name_with_spaces_fails() {
+        assert!(ServerName::new("my server").is_err());
+    }
     #[test]
-    fn name_too_long_fails() { assert!(ServerName::new("a".repeat(65)).is_err()); }
+    fn name_too_long_fails() {
+        assert!(ServerName::new("a".repeat(65)).is_err());
+    }
 }

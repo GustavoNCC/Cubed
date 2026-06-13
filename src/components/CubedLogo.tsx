@@ -43,25 +43,50 @@ export function CubedLogo({ size = 32, className = "" }: Props) {
         {/* Bloque sup-izq */}
         <polygon points="8,14 24,8 40,14 24,20" fill="url(#cubed-face-top)" />
         <polygon points="8,14 8,26 24,32 24,20" fill="url(#cubed-face-left)" />
-        <polygon points="24,20 24,32 40,26 40,14" fill="url(#cubed-face-right)" />
+        <polygon
+          points="24,20 24,32 40,26 40,14"
+          fill="url(#cubed-face-right)"
+        />
 
         {/* Bloque sup-der */}
-        <polygon points="36,14 52,8 64,14 48,20" fill="url(#cubed-face-top)" opacity="0.85"/>
-        <polygon points="48,20 48,32 64,26 64,14" fill="url(#cubed-face-right)" opacity="0.85"/>
+        <polygon
+          points="36,14 52,8 64,14 48,20"
+          fill="url(#cubed-face-top)"
+          opacity="0.85"
+        />
+        <polygon
+          points="48,20 48,32 64,26 64,14"
+          fill="url(#cubed-face-right)"
+          opacity="0.85"
+        />
 
         {/* Bloque izquierdo-medio */}
         <polygon points="0,24 16,18 32,24 16,30" fill="url(#cubed-face-top)" />
         <polygon points="0,24 0,36 16,42 16,30" fill="url(#cubed-face-left)" />
-        <polygon points="16,30 16,42 32,36 32,24" fill="url(#cubed-face-right)" />
+        <polygon
+          points="16,30 16,42 32,36 32,24"
+          fill="url(#cubed-face-right)"
+        />
 
         {/* Bloque inf-izq */}
         <polygon points="8,40 24,34 40,40 24,46" fill="url(#cubed-face-top)" />
         <polygon points="8,40 8,52 24,58 24,46" fill="url(#cubed-face-left)" />
-        <polygon points="24,46 24,58 40,52 40,40" fill="url(#cubed-face-right)" />
+        <polygon
+          points="24,46 24,58 40,52 40,40"
+          fill="url(#cubed-face-right)"
+        />
 
         {/* Bloque inf-der */}
-        <polygon points="36,40 52,34 64,40 48,46" fill="url(#cubed-face-top)" opacity="0.85"/>
-        <polygon points="48,46 48,58 64,52 64,40" fill="url(#cubed-face-right)" opacity="0.85"/>
+        <polygon
+          points="36,40 52,34 64,40 48,46"
+          fill="url(#cubed-face-top)"
+          opacity="0.85"
+        />
+        <polygon
+          points="48,46 48,58 64,52 64,40"
+          fill="url(#cubed-face-right)"
+          opacity="0.85"
+        />
       </g>
 
       {/* Neon edge highlight — top line */}

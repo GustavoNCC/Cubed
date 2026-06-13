@@ -12,12 +12,12 @@ import type { Server, CreateServerForm } from "./types";
 import { useAppEvents } from "./hooks/useAppEvents";
 
 function App() {
-  const [page, setPage]             = useState<Page>("dashboard");
-  const [servers, setServers]       = useState<Server[]>([]);
-  const [error, setError]           = useState<string | null>(null);
-  const [consoleServer, setConsole]  = useState<Server | null>(null);
-  const [backupServer, setBackups]   = useState<Server | null>(null);
-  const [modsServer, setMods]        = useState<Server | null>(null);
+  const [page, setPage] = useState<Page>("dashboard");
+  const [servers, setServers] = useState<Server[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [consoleServer, setConsole] = useState<Server | null>(null);
+  const [backupServer, setBackups] = useState<Server | null>(null);
+  const [modsServer, setMods] = useState<Server | null>(null);
   const [modpackServer, setModpacks] = useState<Server | null>(null);
 
   const refresh = useCallback(async () => {
@@ -29,7 +29,9 @@ function App() {
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   useAppEvents({
     onServerStarted: refresh,
@@ -44,12 +46,12 @@ function App() {
 
   async function handleStart(id: string) {
     const updated = await api.startServer(id);
-    setServers((prev) => prev.map((s) => s.id === id ? updated : s));
+    setServers((prev) => prev.map((s) => (s.id === id ? updated : s)));
   }
 
   async function handleStop(id: string) {
     const updated = await api.stopServer(id);
-    setServers((prev) => prev.map((s) => s.id === id ? updated : s));
+    setServers((prev) => prev.map((s) => (s.id === id ? updated : s)));
   }
 
   async function handleDelete(id: string) {
@@ -69,20 +71,24 @@ function App() {
         )}
 
         {page === "dashboard" && <Dashboard servers={servers} />}
-        {page === "servers" && !consoleServer && !backupServer && !modsServer && !modpackServer && (
-          <Servers
-            servers={servers}
-            onRefresh={refresh}
-            onStart={handleStart}
-            onStop={handleStop}
-            onDelete={handleDelete}
-            onCreate={handleCreate}
-            onConsole={setConsole}
-            onBackups={setBackups}
-            onMods={setMods}
-            onModpacks={setModpacks}
-          />
-        )}
+        {page === "servers" &&
+          !consoleServer &&
+          !backupServer &&
+          !modsServer &&
+          !modpackServer && (
+            <Servers
+              servers={servers}
+              onRefresh={refresh}
+              onStart={handleStart}
+              onStop={handleStop}
+              onDelete={handleDelete}
+              onCreate={handleCreate}
+              onConsole={setConsole}
+              onBackups={setBackups}
+              onMods={setMods}
+              onModpacks={setModpacks}
+            />
+          )}
         {page === "servers" && consoleServer && (
           <Console server={consoleServer} onBack={() => setConsole(null)} />
         )}

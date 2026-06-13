@@ -10,7 +10,9 @@ pub mod entities;
 pub mod error;
 pub mod value_objects;
 
-pub use entities::{Backup, ModEntry, Modpack, ModpackFormat, Server, ServerSoftware, ServerStatus, Settings};
+pub use entities::{
+    Backup, ModEntry, Modpack, ModpackFormat, Server, ServerSoftware, ServerStatus, Settings,
+};
 pub use value_objects::{JavaPath, ServerName, ServerPort, ServerVersion};
 
 pub const DOMAIN_VERSION: &str = env!("CARGO_PKG_VERSION");

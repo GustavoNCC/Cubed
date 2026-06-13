@@ -14,17 +14,35 @@ pub struct ModEntry {
 
 impl ModEntry {
     pub fn new(server_id: Uuid, file_name: String, path: String) -> Self {
-        Self { id: Uuid::new_v4(), server_id, file_name, path }
+        Self {
+            id: Uuid::new_v4(),
+            server_id,
+            file_name,
+            path,
+        }
     }
 
     pub fn reconstitute(id: Uuid, server_id: Uuid, file_name: String, path: String) -> Self {
-        Self { id, server_id, file_name, path }
+        Self {
+            id,
+            server_id,
+            file_name,
+            path,
+        }
     }
 
-    pub fn id(&self) -> Uuid { self.id }
-    pub fn server_id(&self) -> Uuid { self.server_id }
-    pub fn file_name(&self) -> &str { &self.file_name }
-    pub fn path(&self) -> &str { &self.path }
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+    pub fn server_id(&self) -> Uuid {
+        self.server_id
+    }
+    pub fn file_name(&self) -> &str {
+        &self.file_name
+    }
+    pub fn path(&self) -> &str {
+        &self.path
+    }
 }
 
 #[cfg(test)]

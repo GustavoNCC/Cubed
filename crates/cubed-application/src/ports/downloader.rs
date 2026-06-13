@@ -1,6 +1,6 @@
+use crate::error::ApplicationResult;
 use async_trait::async_trait;
 use cubed_domain::entities::ServerSoftware;
-use crate::error::ApplicationResult;
 
 /// Resultado de una descarga.
 #[derive(Debug, Clone)]
@@ -24,5 +24,9 @@ pub trait Downloader: Send + Sync {
     ) -> ApplicationResult<DownloadedJar>;
 
     /// Construye la URL de descarga sin hacer la petición.
-    fn build_url(&self, software: &ServerSoftware, minecraft_version: &str) -> ApplicationResult<String>;
+    fn build_url(
+        &self,
+        software: &ServerSoftware,
+        minecraft_version: &str,
+    ) -> ApplicationResult<String>;
 }

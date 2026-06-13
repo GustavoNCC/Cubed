@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::error::{DomainError, DomainResult};
+use serde::{Deserialize, Serialize};
 
 /// Puerto de red válido para un servidor Minecraft (1024–65535).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,7 +15,9 @@ impl ServerPort {
         Ok(Self(value))
     }
 
-    pub fn value(self) -> u16 { self.0 }
+    pub fn value(self) -> u16 {
+        self.0
+    }
 }
 
 impl std::fmt::Display for ServerPort {
@@ -29,9 +31,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_port() { assert!(ServerPort::new(25565).is_ok()); }
+    fn default_port() {
+        assert!(ServerPort::new(25565).is_ok());
+    }
     #[test]
-    fn privileged_port_fails() { assert!(ServerPort::new(80).is_err()); }
+    fn privileged_port_fails() {
+        assert!(ServerPort::new(80).is_err());
+    }
     #[test]
-    fn max_port_ok() { assert!(ServerPort::new(65535).is_ok()); }
+    fn max_port_ok() {
+        assert!(ServerPort::new(65535).is_ok());
+    }
 }

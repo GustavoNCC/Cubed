@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use std::cmp::Reverse;
 use tokio::process::Command;
 
 use cubed_application::error::{ApplicationError, ApplicationResult};
@@ -70,11 +71,7 @@ fn parse_major_version(output: &str) -> Option<u32> {
 }
 
 async fn probe_java(path: &str) -> Option<JavaInstallation> {
-    let output = Command::new(path)
-        .arg("-version")
-        .output()
-        .await
-        .ok()?;
+    let output = Command::new(path).arg("-version").output().await.ok()?;
 
     // `java -version` escribe en stderr
     let text = String::from_utf8_lossy(&output.stderr).to_string();
@@ -98,7 +95,9 @@ impl SystemJavaManager {
 }
 
 impl Default for SystemJavaManager {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
@@ -136,14 +135,15 @@ impl JavaManager for SystemJavaManager {
         }
 
         // Ordenar por versión mayor descendente
-        found.sort_by(|a, b| b.major_version.cmp(&a.major_version));
+        found.sort_by_key(|j| Reverse(j.major_version));
         Ok(found)
     }
 
     async fn inspect(&self, path: &str) -> ApplicationResult<JavaInstallation> {
         probe_java(path).await.ok_or_else(|| {
             ApplicationError::Infrastructure(format!(
-                "No se pudo obtener la versión de Java en '{}'", path
+                "No se pudo obtener la versión de Java en '{}'",
+                path
             ))
         })
     }

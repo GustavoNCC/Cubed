@@ -17,27 +17,34 @@ interface Props {
 }
 
 export function Console({ server, onBack }: Props) {
-  const [lines, setLines]     = useState<ConsoleLine[]>([]);
-  const [input, setInput]     = useState("");
+  const [lines, setLines] = useState<ConsoleLine[]>([]);
+  const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const bottomRef             = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
 
     async function setup() {
       // Subscribe and get history
-      const history = await invoke<ConsoleLine[]>("subscribe_console", { id: server.id });
+      const history = await invoke<ConsoleLine[]>("subscribe_console", {
+        id: server.id,
+      });
       setLines(history);
 
       // Listen for new lines via Tauri event
-      unlisten = await listen<ConsoleLine>(`console-line:${server.id}`, (evt) => {
-        setLines((prev) => [...prev.slice(-999), evt.payload]);
-      });
+      unlisten = await listen<ConsoleLine>(
+        `console-line:${server.id}`,
+        (evt) => {
+          setLines((prev) => [...prev.slice(-999), evt.payload]);
+        },
+      );
     }
 
     setup().catch(console.error);
-    return () => { unlisten?.(); };
+    return () => {
+      unlisten?.();
+    };
   }, [server.id]);
 
   // Auto-scroll to bottom
@@ -80,14 +87,16 @@ export function Console({ server, onBack }: Props) {
       {/* Terminal */}
       <div className="flex-1 overflow-y-auto rounded-lg border bg-zinc-950 p-3 font-mono text-xs leading-relaxed min-h-0">
         {lines.length === 0 ? (
-          <p className="text-zinc-500">Sin salida todavía. Inicia el servidor para ver la consola.</p>
+          <p className="text-zinc-500">
+            Sin salida todavía. Inicia el servidor para ver la consola.
+          </p>
         ) : (
           lines.map((l, i) => (
             <div
               key={i}
               className={cn(
                 "whitespace-pre-wrap break-all",
-                l.is_stdout ? "text-zinc-200" : "text-yellow-400"
+                l.is_stdout ? "text-zinc-200" : "text-yellow-400",
               )}
             >
               {l.text}

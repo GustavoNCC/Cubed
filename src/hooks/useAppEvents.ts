@@ -30,8 +30,8 @@ export function useAppEvents(opts: UseAppEventsOptions) {
       subs.push(listen("cubed://tailscale.updated", opts.onTailscaleUpdated));
 
     return () => {
-      subs.forEach(p => p.then(unlisten => unlisten()));
+      subs.forEach((p) => p.then((unlisten) => unlisten()));
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }

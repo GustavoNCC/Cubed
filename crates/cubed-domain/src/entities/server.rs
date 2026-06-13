@@ -2,23 +2,18 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::value_objects::{ServerName, ServerPort, ServerVersion, JavaPath};
 use crate::error::DomainResult;
+use crate::value_objects::{JavaPath, ServerName, ServerPort, ServerVersion};
 
 /// Estado del ciclo de vida de un servidor Minecraft.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ServerStatus {
+    #[default]
     Offline,
     Starting,
     Running,
     Stopping,
     Crashed,
-}
-
-impl Default for ServerStatus {
-    fn default() -> Self {
-        Self::Offline
-    }
 }
 
 impl std::fmt::Display for ServerStatus {
@@ -93,6 +88,7 @@ impl Server {
     }
 
     /// Reconstruye desde persistencia (con id y timestamps conocidos).
+    #[allow(clippy::too_many_arguments)]
     pub fn reconstitute(
         id: Uuid,
         name: ServerName,
@@ -104,7 +100,17 @@ impl Server {
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
     ) -> Self {
-        Self { id, name, version, software, port, java_path, status, created_at, updated_at }
+        Self {
+            id,
+            name,
+            version,
+            software,
+            port,
+            java_path,
+            status,
+            created_at,
+            updated_at,
+        }
     }
 
     // --- Transitions ---
@@ -169,17 +175,37 @@ impl Server {
 
     // --- Getters ---
 
-    pub fn id(&self) -> Uuid { self.id }
-    pub fn name(&self) -> &ServerName { &self.name }
-    pub fn version(&self) -> &ServerVersion { &self.version }
-    pub fn software(&self) -> &ServerSoftware { &self.software }
-    pub fn port(&self) -> &ServerPort { &self.port }
-    pub fn java_path(&self) -> &JavaPath { &self.java_path }
-    pub fn status(&self) -> &ServerStatus { &self.status }
-    pub fn created_at(&self) -> DateTime<Utc> { self.created_at }
-    pub fn updated_at(&self) -> DateTime<Utc> { self.updated_at }
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+    pub fn name(&self) -> &ServerName {
+        &self.name
+    }
+    pub fn version(&self) -> &ServerVersion {
+        &self.version
+    }
+    pub fn software(&self) -> &ServerSoftware {
+        &self.software
+    }
+    pub fn port(&self) -> &ServerPort {
+        &self.port
+    }
+    pub fn java_path(&self) -> &JavaPath {
+        &self.java_path
+    }
+    pub fn status(&self) -> &ServerStatus {
+        &self.status
+    }
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+    pub fn updated_at(&self) -> DateTime<Utc> {
+        self.updated_at
+    }
 
-    pub fn is_running(&self) -> bool { self.status == ServerStatus::Running }
+    pub fn is_running(&self) -> bool {
+        self.status == ServerStatus::Running
+    }
 
     fn transition(&mut self, new: ServerStatus) {
         self.status = new;
@@ -190,7 +216,7 @@ impl Server {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::value_objects::{ServerName, ServerPort, ServerVersion, JavaPath};
+    use crate::value_objects::{JavaPath, ServerName, ServerPort, ServerVersion};
 
     fn make_server() -> Server {
         Server::new(

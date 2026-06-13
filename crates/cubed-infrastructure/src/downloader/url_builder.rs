@@ -1,8 +1,8 @@
 use reqwest::Client;
 use serde::Deserialize;
 
-use cubed_domain::entities::ServerSoftware;
 use cubed_application::error::{ApplicationError, ApplicationResult};
+use cubed_domain::entities::ServerSoftware;
 
 // ── Paper ─────────────────────────────────────────────────────────────────────
 
@@ -45,9 +45,12 @@ async fn paper_url(client: &Client, mc: &str) -> ApplicationResult<String> {
         .builds
         .into_iter()
         .max_by_key(|b| b.build)
-        .ok_or_else(|| ApplicationError::Infrastructure(
-            format!("No hay builds de Paper para Minecraft {}", mc),
-        ))?;
+        .ok_or_else(|| {
+            ApplicationError::Infrastructure(format!(
+                "No hay builds de Paper para Minecraft {}",
+                mc
+            ))
+        })?;
 
     Ok(format!(
         "https://api.papermc.io/v2/projects/paper/versions/{}/builds/{}/downloads/{}",
@@ -81,7 +84,10 @@ struct FabricInstaller {
 async fn fabric_url(client: &Client, mc: &str) -> ApplicationResult<String> {
     // Último loader
     let loaders: Vec<FabricLoader> = client
-        .get(format!("https://meta.fabricmc.net/v2/versions/loader/{}", mc))
+        .get(format!(
+            "https://meta.fabricmc.net/v2/versions/loader/{}",
+            mc
+        ))
         .send()
         .await
         .map_err(|e| ApplicationError::Infrastructure(e.to_string()))?
@@ -92,9 +98,12 @@ async fn fabric_url(client: &Client, mc: &str) -> ApplicationResult<String> {
     let loader_version = loaders
         .into_iter()
         .next()
-        .ok_or_else(|| ApplicationError::Infrastructure(
-            format!("No hay versiones de Fabric loader para Minecraft {}", mc),
-        ))?
+        .ok_or_else(|| {
+            ApplicationError::Infrastructure(format!(
+                "No hay versiones de Fabric loader para Minecraft {}",
+                mc
+            ))
+        })?
         .loader
         .version;
 
@@ -111,9 +120,9 @@ async fn fabric_url(client: &Client, mc: &str) -> ApplicationResult<String> {
     let installer_version = installers
         .into_iter()
         .next()
-        .ok_or_else(|| ApplicationError::Infrastructure(
-            "No hay versiones de Fabric installer".to_string(),
-        ))?
+        .ok_or_else(|| {
+            ApplicationError::Infrastructure("No hay versiones de Fabric installer".to_string())
+        })?
         .version;
 
     Ok(format!(
@@ -140,12 +149,16 @@ async fn forge_url(client: &Client, mc: &str) -> ApplicationResult<String> {
         .map_err(|e| ApplicationError::Infrastructure(e.to_string()))?;
 
     // Preferir -recommended, caer en -latest
-    let forge_ver = promos.promos
+    let forge_ver = promos
+        .promos
         .get(&format!("{}-recommended", mc))
         .or_else(|| promos.promos.get(&format!("{}-latest", mc)))
-        .ok_or_else(|| ApplicationError::Infrastructure(
-            format!("No hay versión de Forge para Minecraft {}", mc),
-        ))?
+        .ok_or_else(|| {
+            ApplicationError::Infrastructure(format!(
+                "No hay versión de Forge para Minecraft {}",
+                mc
+            ))
+        })?
         .clone();
 
     let full = format!("{}-{}", mc, forge_ver);
@@ -184,9 +197,10 @@ async fn neoforge_url(client: &Client, mc: &str) -> ApplicationResult<String> {
         .map_err(|e| ApplicationError::Infrastructure(e.to_string()))?;
 
     let latest = resp.versions.into_iter().last().ok_or_else(|| {
-        ApplicationError::Infrastructure(
-            format!("No hay versiones de NeoForge para Minecraft {}", mc),
-        )
+        ApplicationError::Infrastructure(format!(
+            "No hay versiones de NeoForge para Minecraft {}",
+            mc
+        ))
     })?;
 
     Ok(format!(
@@ -204,10 +218,10 @@ pub async fn resolve_url(
     mc: &str,
 ) -> ApplicationResult<String> {
     match software {
-        ServerSoftware::Paper    => paper_url(client, mc).await,
-        ServerSoftware::Purpur   => Ok(purpur_url(mc)),
-        ServerSoftware::Fabric   => fabric_url(client, mc).await,
-        ServerSoftware::Forge    => forge_url(client, mc).await,
+        ServerSoftware::Paper => paper_url(client, mc).await,
+        ServerSoftware::Purpur => Ok(purpur_url(mc)),
+        ServerSoftware::Fabric => fabric_url(client, mc).await,
+        ServerSoftware::Forge => forge_url(client, mc).await,
         ServerSoftware::NeoForge => neoforge_url(client, mc).await,
     }
 }
@@ -217,9 +231,10 @@ pub async fn resolve_url(
 pub fn static_url(software: &ServerSoftware, mc: &str) -> ApplicationResult<String> {
     match software {
         ServerSoftware::Purpur => Ok(purpur_url(mc)),
-        other => Err(ApplicationError::Infrastructure(
-            format!("{} requiere resolución de URL en línea", other),
-        )),
+        other => Err(ApplicationError::Infrastructure(format!(
+            "{} requiere resolución de URL en línea",
+            other
+        ))),
     }
 }
 

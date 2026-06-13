@@ -2,9 +2,9 @@ use chrono::{DateTime, Utc};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+use cubed_application::error::{ApplicationError, ApplicationResult};
 use cubed_domain::entities::{Server, ServerSoftware, ServerStatus};
 use cubed_domain::value_objects::{JavaPath, ServerName, ServerPort, ServerVersion};
-use cubed_application::error::{ApplicationError, ApplicationResult};
 
 /// Fila tal como la devuelve PostgreSQL.
 #[derive(Debug, FromRow)]
@@ -31,34 +31,43 @@ impl ServerRow {
         let status = parse_status(&self.status)?;
 
         Ok(Server::reconstitute(
-            self.id, name, version, software, port, java_path,
-            status, self.created_at, self.updated_at,
+            self.id,
+            name,
+            version,
+            software,
+            port,
+            java_path,
+            status,
+            self.created_at,
+            self.updated_at,
         ))
     }
 }
 
 fn parse_software(s: &str) -> ApplicationResult<ServerSoftware> {
     match s {
-        "Paper"    => Ok(ServerSoftware::Paper),
-        "Purpur"   => Ok(ServerSoftware::Purpur),
-        "Fabric"   => Ok(ServerSoftware::Fabric),
-        "Forge"    => Ok(ServerSoftware::Forge),
+        "Paper" => Ok(ServerSoftware::Paper),
+        "Purpur" => Ok(ServerSoftware::Purpur),
+        "Fabric" => Ok(ServerSoftware::Fabric),
+        "Forge" => Ok(ServerSoftware::Forge),
         "NeoForge" => Ok(ServerSoftware::NeoForge),
-        other => Err(ApplicationError::Infrastructure(
-            format!("Software desconocido en base de datos: '{}'", other),
-        )),
+        other => Err(ApplicationError::Infrastructure(format!(
+            "Software desconocido en base de datos: '{}'",
+            other
+        ))),
     }
 }
 
 fn parse_status(s: &str) -> ApplicationResult<ServerStatus> {
     match s {
-        "offline"  => Ok(ServerStatus::Offline),
+        "offline" => Ok(ServerStatus::Offline),
         "starting" => Ok(ServerStatus::Starting),
-        "running"  => Ok(ServerStatus::Running),
+        "running" => Ok(ServerStatus::Running),
         "stopping" => Ok(ServerStatus::Stopping),
-        "crashed"  => Ok(ServerStatus::Crashed),
-        other => Err(ApplicationError::Infrastructure(
-            format!("Estado desconocido en base de datos: '{}'", other),
-        )),
+        "crashed" => Ok(ServerStatus::Crashed),
+        other => Err(ApplicationError::Infrastructure(format!(
+            "Estado desconocido en base de datos: '{}'",
+            other
+        ))),
     }
 }

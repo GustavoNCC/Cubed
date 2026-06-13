@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use uuid::Uuid;
 use crate::error::ApplicationResult;
 use crate::ports::{ConsoleLine, ConsoleManager};
+use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct ServerConsole {
     console: Arc<dyn ConsoleManager>,

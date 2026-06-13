@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::error::ApplicationResult;
 use crate::ports::{JavaInstallation, JavaManager};
+use std::sync::Arc;
 
 pub struct SelectJava {
     java: Arc<dyn JavaManager>,
@@ -17,7 +17,10 @@ impl SelectJava {
     }
 
     /// Selecciona el mejor binario para la versión de Minecraft indicada.
-    pub async fn for_version(&self, minecraft_version: &str) -> ApplicationResult<JavaInstallation> {
+    pub async fn for_version(
+        &self,
+        minecraft_version: &str,
+    ) -> ApplicationResult<JavaInstallation> {
         self.java.select_for_version(minecraft_version).await
     }
 
@@ -28,7 +31,8 @@ impl SelectJava {
         minecraft_version: &str,
     ) -> ApplicationResult<JavaInstallation> {
         let installation = self.java.inspect(path).await?;
-        self.java.validate_compatibility(&installation, minecraft_version)?;
+        self.java
+            .validate_compatibility(&installation, minecraft_version)?;
         Ok(installation)
     }
 }

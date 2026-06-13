@@ -8,7 +8,8 @@ const SOFTWARE_OPTIONS = [
   {
     value: "Paper",
     label: "Paper",
-    description: "El más popular. Alto rendimiento, compatible con plugins Bukkit/Spigot.",
+    description:
+      "El más popular. Alto rendimiento, compatible con plugins Bukkit/Spigot.",
     badge: "Recomendado",
     badgeClass: "bg-primary/20 text-primary",
     mods: false,
@@ -16,7 +17,8 @@ const SOFTWARE_OPTIONS = [
   {
     value: "Purpur",
     label: "Purpur",
-    description: "Como Paper pero con más opciones de configuración y características extra.",
+    description:
+      "Como Paper pero con más opciones de configuración y características extra.",
     badge: "Plugins",
     badgeClass: "bg-purple-500/20 text-purple-400",
     mods: false,
@@ -32,7 +34,8 @@ const SOFTWARE_OPTIONS = [
   {
     value: "Forge",
     label: "Forge",
-    description: "El estándar clásico para modpacks. Compatible con la mayoría de mods.",
+    description:
+      "El estándar clásico para modpacks. Compatible con la mayoría de mods.",
     badge: "Mods",
     badgeClass: "bg-orange-500/20 text-orange-400",
     mods: true,
@@ -40,7 +43,8 @@ const SOFTWARE_OPTIONS = [
   {
     value: "NeoForge",
     label: "NeoForge",
-    description: "Sucesor moderno de Forge. Más activo y actualizado para 1.20+.",
+    description:
+      "Sucesor moderno de Forge. Más activo y actualizado para 1.20+.",
     badge: "Mods",
     badgeClass: "bg-amber-500/20 text-amber-400",
     mods: true,
@@ -62,12 +66,12 @@ const DEFAULTS: CreateServerForm = {
 };
 
 export function CreateServerModal({ onClose, onCreate }: Props) {
-  const [form, setForm]             = useState<CreateServerForm>(DEFAULTS);
-  const [error, setError]           = useState<string | null>(null);
-  const [loading, setLoading]       = useState(false);
+  const [form, setForm] = useState<CreateServerForm>(DEFAULTS);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [portLoading, setPortLoading] = useState(false);
   const [portSuggested, setPortSuggested] = useState(false);
-  const [javaList, setJavaList]     = useState<JavaInstallationDto[]>([]);
+  const [javaList, setJavaList] = useState<JavaInstallationDto[]>([]);
   const [javaLoading, setJavaLoading] = useState(false);
   const [javaAutoSet, setJavaAutoSet] = useState(false);
   const [showJavaPicker, setShowJavaPicker] = useState(false);
@@ -77,10 +81,13 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
   useEffect(() => {
     suggestPort();
     detectJava(DEFAULTS.version);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function set<K extends keyof CreateServerForm>(key: K, value: CreateServerForm[K]) {
+  function set<K extends keyof CreateServerForm>(
+    key: K,
+    value: CreateServerForm[K],
+  ) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
@@ -141,20 +148,30 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
     }
   }
 
-  const selectedSoftware = SOFTWARE_OPTIONS.find((s) => s.value === form.software);
+  const selectedSoftware = SOFTWARE_OPTIONS.find(
+    (s) => s.value === form.software,
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl shadow-primary/10 flex flex-col overflow-hidden neon-border">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
-          <h2 className="text-base font-semibold text-foreground">Nuevo servidor</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <h2 className="text-base font-semibold text-foreground">
+            Nuevo servidor
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-6 py-4 overflow-y-auto max-h-[80vh]">
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col gap-4 px-6 py-4 overflow-y-auto max-h-[80vh]"
+        >
           {/* Nombre */}
           <Field label="Nombre del servidor">
             <input
@@ -187,8 +204,14 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
                   min={1024}
                   max={65535}
                   value={form.port}
-                  onChange={(e) => { set("port", Number(e.target.value)); setPortSuggested(false); }}
-                  className={cn("input flex-1 min-w-0", portSuggested && "border-primary/50")}
+                  onChange={(e) => {
+                    set("port", Number(e.target.value));
+                    setPortSuggested(false);
+                  }}
+                  className={cn(
+                    "input flex-1 min-w-0",
+                    portSuggested && "border-primary/50",
+                  )}
                 />
                 <button
                   type="button"
@@ -197,11 +220,18 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
                   title="Buscar puerto libre"
                   className="flex items-center justify-center w-9 rounded-md border border-border bg-muted hover:bg-muted/80 transition-colors disabled:opacity-40"
                 >
-                  <RefreshCw className={cn("h-3.5 w-3.5 text-muted-foreground", portLoading && "animate-spin")} />
+                  <RefreshCw
+                    className={cn(
+                      "h-3.5 w-3.5 text-muted-foreground",
+                      portLoading && "animate-spin",
+                    )}
+                  />
                 </button>
               </div>
               {portSuggested && (
-                <p className="text-xs text-primary mt-0.5">Puerto libre detectado</p>
+                <p className="text-xs text-primary mt-0.5">
+                  Puerto libre detectado
+                </p>
               )}
             </Field>
           </div>
@@ -216,7 +246,7 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
                     "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
                     form.software === opt.value
                       ? "border-primary/50 bg-primary/5 neon-border"
-                      : "border-border hover:border-muted-foreground/50 hover:bg-muted/30"
+                      : "border-border hover:border-muted-foreground/50 hover:bg-muted/30",
                   )}
                 >
                   <input
@@ -230,11 +260,18 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{opt.label}</span>
-                      <span className={cn("text-xs px-1.5 py-0.5 rounded font-medium", opt.badgeClass)}>
+                      <span
+                        className={cn(
+                          "text-xs px-1.5 py-0.5 rounded font-medium",
+                          opt.badgeClass,
+                        )}
+                      >
                         {opt.badge}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{opt.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                      {opt.description}
+                    </p>
                   </div>
                 </label>
               ))}
@@ -250,11 +287,14 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
                     <input
                       required
                       value={form.java_path}
-                      onChange={(e) => { set("java_path", e.target.value); setJavaAutoSet(false); }}
+                      onChange={(e) => {
+                        set("java_path", e.target.value);
+                        setJavaAutoSet(false);
+                      }}
                       placeholder="/usr/bin/java"
                       className={cn(
                         "input font-mono text-xs pr-8",
-                        javaAutoSet && "border-primary/50"
+                        javaAutoSet && "border-primary/50",
                       )}
                     />
                     {javaLoading && (
@@ -287,13 +327,15 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
                         }}
                         className={cn(
                           "w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted transition-colors",
-                          form.java_path === j.path && "bg-primary/10"
+                          form.java_path === j.path && "bg-primary/10",
                         )}
                       >
                         <Cpu className="h-3.5 w-3.5 text-primary shrink-0" />
                         <div className="min-w-0">
                           <p className="text-xs font-mono truncate">{j.path}</p>
-                          <p className="text-[10px] text-muted-foreground">Java {j.major_version}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Java {j.major_version}
+                          </p>
                         </div>
                       </button>
                     ))}
@@ -309,7 +351,8 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
               )}
               {!javaLoading && javaList.length === 0 && (
                 <p className="text-xs text-amber-400">
-                  No se encontró Java. Instala OpenJDK: <code>sudo apt install openjdk-21-jdk</code>
+                  No se encontró Java. Instala OpenJDK:{" "}
+                  <code>sudo apt install openjdk-21-jdk</code>
                 </p>
               )}
             </div>
@@ -336,7 +379,8 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
           {/* Software hint for mods */}
           {selectedSoftware?.mods && (
             <div className="rounded-md bg-accent/10 border border-accent/20 px-3 py-2 text-xs text-accent/90">
-              {form.software} es compatible con mods .jar. Podrás instalarlos desde la sección Mods una vez creado el servidor.
+              {form.software} es compatible con mods .jar. Podrás instalarlos
+              desde la sección Mods una vez creado el servidor.
             </div>
           )}
 
@@ -364,10 +408,18 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        {label}
+      </span>
       {children}
     </label>
   );

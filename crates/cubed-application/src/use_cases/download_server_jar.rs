@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use cubed_domain::entities::ServerSoftware;
 use crate::error::ApplicationResult;
 use crate::ports::{DownloadedJar, Downloader};
+use cubed_domain::entities::ServerSoftware;
+use std::sync::Arc;
 
 pub struct DownloadServerJar {
     downloader: Arc<dyn Downloader>,
@@ -18,7 +18,9 @@ impl DownloadServerJar {
         minecraft_version: &str,
         dest_dir: &str,
     ) -> ApplicationResult<DownloadedJar> {
-        self.downloader.download(software, minecraft_version, dest_dir).await
+        self.downloader
+            .download(software, minecraft_version, dest_dir)
+            .await
     }
 
     pub fn preview_url(

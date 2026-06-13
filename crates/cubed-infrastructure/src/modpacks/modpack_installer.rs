@@ -63,12 +63,15 @@ pub struct InstallProgress {
 // ── Installer ─────────────────────────────────────────────────────────────────
 
 pub struct ModpackInstaller {
-    servers:  Arc<dyn ServerRepository>,
+    servers: Arc<dyn ServerRepository>,
     modpacks: Arc<dyn ModpackRepository>,
 }
 
 impl ModpackInstaller {
-    pub fn new(servers: Arc<dyn ServerRepository>, modpacks: Arc<dyn ModpackRepository>) -> Arc<Self> {
+    pub fn new(
+        servers: Arc<dyn ServerRepository>,
+        modpacks: Arc<dyn ModpackRepository>,
+    ) -> Arc<Self> {
         Arc::new(Self { servers, modpacks })
     }
 
@@ -80,17 +83,19 @@ impl ModpackInstaller {
         progress_cb: impl Fn(InstallProgress) + Send + Sync + 'static,
     ) -> ApplicationResult<(Modpack, InstallSummary)> {
         let uc = ImportModpack::new(self.servers.clone(), self.modpacks.clone());
-        let modpack = uc.execute(ImportModpackInput {
-            server_id,
-            source_path: source_path.to_string(),
-        }).await?;
+        let modpack = uc
+            .execute(ImportModpackInput {
+                server_id,
+                source_path: source_path.to_string(),
+            })
+            .await?;
 
         // Wrap in Arc so it can be cloned into spawn_blocking closures
         let cb: Arc<dyn Fn(InstallProgress) + Send + Sync + 'static> = Arc::new(progress_cb);
 
         let summary = match modpack.format() {
             ModpackFormat::Mrpack => self.install_mrpack(source_path, install_dir, cb).await?,
-            ModpackFormat::Zip    => self.install_zip(source_path, install_dir, cb).await?,
+            ModpackFormat::Zip => self.install_zip(source_path, install_dir, cb).await?,
         };
 
         Ok((modpack, summary))
@@ -108,9 +113,12 @@ impl ModpackInstaller {
             .await
             .map_err(|e| ApplicationError::Infrastructure(format!("spawn_blocking: {}", e)))??;
 
-        let files: Vec<MrpackFile> = index.files.into_iter()
+        let files: Vec<MrpackFile> = index
+            .files
+            .into_iter()
             .filter(|f| {
-                f.env.as_ref()
+                f.env
+                    .as_ref()
                     .and_then(|e| e.server.as_deref())
                     .map(|s| s != "unsupported")
                     .unwrap_or(true)
@@ -141,11 +149,18 @@ impl ModpackInstaller {
             let mut success = false;
             for url in &file.downloads {
                 match download_file(&client, url, &mods_dir, file_name).await {
-                    Ok(()) => { success = true; break; }
+                    Ok(()) => {
+                        success = true;
+                        break;
+                    }
                     Err(_) => continue,
                 }
             }
-            if success { downloaded += 1; } else { skipped += 1; }
+            if success {
+                downloaded += 1;
+            } else {
+                skipped += 1;
+            }
         }
 
         let loader_info = index.dependencies.map(|d| {
@@ -190,12 +205,15 @@ impl ModpackInstaller {
                 let client = reqwest::Client::new();
 
                 for file in &manifest.files {
-                    let name = format!("{}-{}.jar",
+                    let name = format!(
+                        "{}-{}.jar",
                         file.project_id.unwrap_or(0),
                         file.file_id.unwrap_or(0),
                     );
                     progress_cb(InstallProgress {
-                        total, done: downloaded, current_file: name.clone(),
+                        total,
+                        done: downloaded,
+                        current_file: name.clone(),
                     });
 
                     if let Some(url) = &file.url {
@@ -218,14 +236,16 @@ impl ModpackInstaller {
             }
             Err(_) => {
                 // Fallback: extract all .jar files from the zip into mods/
-                let sp2        = source_path.to_string();
-                let install_d  = install_dir.to_string();
-                let cb2        = progress_cb.clone();
-                let extracted  = tokio::task::spawn_blocking(move || {
+                let sp2 = source_path.to_string();
+                let install_d = install_dir.to_string();
+                let cb2 = progress_cb.clone();
+                let extracted = tokio::task::spawn_blocking(move || {
                     extract_server_zip(&sp2, &install_d, &*cb2)
                 })
                 .await
-                .map_err(|e| ApplicationError::Infrastructure(format!("spawn_blocking: {}", e)))??;
+                .map_err(|e| {
+                    ApplicationError::Infrastructure(format!("spawn_blocking: {}", e))
+                })??;
 
                 Ok(InstallSummary {
                     name: Path::new(source_path)
@@ -258,50 +278,60 @@ fn read_mrpack_index(path: &str) -> ApplicationResult<MrpackIndex> {
     let file = std::fs::File::open(path).map_err(|e| {
         ApplicationError::Infrastructure(format!("No se pudo abrir '{}': {}", path, e))
     })?;
-    let mut zip = zip::ZipArchive::new(file).map_err(|e| {
-        ApplicationError::Infrastructure(format!("No es un ZIP válido: {}", e))
-    })?;
+    let mut zip = zip::ZipArchive::new(file)
+        .map_err(|e| ApplicationError::Infrastructure(format!("No es un ZIP válido: {}", e)))?;
     let mut entry = zip.by_name("modrinth.index.json").map_err(|_| {
         ApplicationError::Infrastructure("modrinth.index.json no encontrado en el .mrpack".into())
     })?;
     let mut buf = String::new();
-    entry.read_to_string(&mut buf).map_err(|e| {
-        ApplicationError::Infrastructure(format!("Error leyendo manifest: {}", e))
-    })?;
-    serde_json::from_str(&buf).map_err(|e| {
-        ApplicationError::Infrastructure(format!("Manifest JSON inválido: {}", e))
-    })
+    entry
+        .read_to_string(&mut buf)
+        .map_err(|e| ApplicationError::Infrastructure(format!("Error leyendo manifest: {}", e)))?;
+    serde_json::from_str(&buf)
+        .map_err(|e| ApplicationError::Infrastructure(format!("Manifest JSON inválido: {}", e)))
 }
 
 fn read_cf_manifest(path: &str) -> ApplicationResult<CfManifest> {
     let file = std::fs::File::open(path).map_err(|e| {
         ApplicationError::Infrastructure(format!("No se pudo abrir '{}': {}", path, e))
     })?;
-    let mut zip = zip::ZipArchive::new(file).map_err(|e| {
-        ApplicationError::Infrastructure(format!("No es un ZIP válido: {}", e))
-    })?;
-    let mut entry = zip.by_name("manifest.json").map_err(|_| {
-        ApplicationError::Infrastructure("manifest.json no encontrado".into())
-    })?;
+    let mut zip = zip::ZipArchive::new(file)
+        .map_err(|e| ApplicationError::Infrastructure(format!("No es un ZIP válido: {}", e)))?;
+    let mut entry = zip
+        .by_name("manifest.json")
+        .map_err(|_| ApplicationError::Infrastructure("manifest.json no encontrado".into()))?;
     let mut buf = String::new();
-    entry.read_to_string(&mut buf).map_err(|e| {
-        ApplicationError::Infrastructure(format!("Error leyendo manifest: {}", e))
-    })?;
-    serde_json::from_str(&buf).map_err(|e| {
-        ApplicationError::Infrastructure(format!("Manifest JSON inválido: {}", e))
-    })
+    entry
+        .read_to_string(&mut buf)
+        .map_err(|e| ApplicationError::Infrastructure(format!("Error leyendo manifest: {}", e)))?;
+    serde_json::from_str(&buf)
+        .map_err(|e| ApplicationError::Infrastructure(format!("Manifest JSON inválido: {}", e)))
 }
 
 /// Directorios de servidor que DEBEN extraerse.
 const INCLUDE_DIRS: &[&str] = &[
-    "mods/", "config/", "kubejs/", "defaultconfigs/",
-    "scripts/", "resources/", "openloader/", "patchouli_books/",
+    "mods/",
+    "config/",
+    "kubejs/",
+    "defaultconfigs/",
+    "scripts/",
+    "resources/",
+    "openloader/",
+    "patchouli_books/",
 ];
 
 /// Prefijos que DEBEN ignorarse (mundo, logs, caché).
 const SKIP_PREFIXES: &[&str] = &[
-    "world/", "world_nether/", "world_the_end/", "DIM-1/", "DIM1/",
-    "logs/", "crash-reports/", ".git/", "local/", "journeymap/data/",
+    "world/",
+    "world_nether/",
+    "world_the_end/",
+    "DIM-1/",
+    "DIM1/",
+    "logs/",
+    "crash-reports/",
+    ".git/",
+    "local/",
+    "journeymap/data/",
 ];
 
 /// Extrae un ZIP de servidor/modpack de forma inteligente:
@@ -315,12 +345,10 @@ fn extract_server_zip(
     install_dir: &str,
     progress_cb: &(dyn Fn(InstallProgress) + Send + Sync),
 ) -> ApplicationResult<usize> {
-    let file = std::fs::File::open(zip_path).map_err(|e| {
-        ApplicationError::Infrastructure(format!("No se pudo abrir ZIP: {}", e))
-    })?;
-    let mut zip = zip::ZipArchive::new(file).map_err(|e| {
-        ApplicationError::Infrastructure(format!("ZIP inválido: {}", e))
-    })?;
+    let file = std::fs::File::open(zip_path)
+        .map_err(|e| ApplicationError::Infrastructure(format!("No se pudo abrir ZIP: {}", e)))?;
+    let mut zip = zip::ZipArchive::new(file)
+        .map_err(|e| ApplicationError::Infrastructure(format!("ZIP inválido: {}", e)))?;
 
     // Detectar si el ZIP tiene estructura de servidor
     let has_structure = (0..zip.len()).any(|i| {
@@ -352,17 +380,21 @@ fn extract_server_zip(
                 continue;
             }
             // Only include wanted directories or root-level files (server.jar, *.properties…)
-            let in_wanted  = INCLUDE_DIRS.iter().any(|p| raw_name.starts_with(p));
-            let is_root    = !raw_name.contains('/') && !raw_name.ends_with('/');
+            let in_wanted = INCLUDE_DIRS.iter().any(|p| raw_name.starts_with(p));
+            let is_root = !raw_name.contains('/') && !raw_name.ends_with('/');
             if !in_wanted && !is_root {
                 continue;
             }
             std::path::PathBuf::from(install_dir).join(&raw_name)
         } else {
             // Flat mode: only .jar files → mods/
-            if !raw_name.ends_with(".jar") { continue; }
+            if !raw_name.ends_with(".jar") {
+                continue;
+            }
             let file_name = Path::new(&raw_name)
-                .file_name().and_then(|n| n.to_str()).unwrap_or(&raw_name);
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(&raw_name);
             std::path::PathBuf::from(&mods_dir).join(file_name)
         };
 
@@ -377,8 +409,10 @@ fn extract_server_zip(
             })?;
         }
 
-        let display_name = dest_path.file_name()
-            .and_then(|n| n.to_str()).unwrap_or(&raw_name);
+        let display_name = dest_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&raw_name);
         progress_cb(InstallProgress {
             total,
             done: extracted,
@@ -386,7 +420,11 @@ fn extract_server_zip(
         });
 
         let mut out = std::fs::File::create(&dest_path).map_err(|e| {
-            ApplicationError::Infrastructure(format!("Error creando '{}': {}", dest_path.display(), e))
+            ApplicationError::Infrastructure(format!(
+                "Error creando '{}': {}",
+                dest_path.display(),
+                e
+            ))
         })?;
         std::io::copy(&mut entry, &mut out).map_err(|e| {
             ApplicationError::Infrastructure(format!("Error extrayendo '{}': {}", display_name, e))
@@ -397,24 +435,31 @@ fn extract_server_zip(
     Ok(extracted)
 }
 
-async fn download_file(client: &reqwest::Client, url: &str, dir: &str, file_name: &str) -> ApplicationResult<()> {
+async fn download_file(
+    client: &reqwest::Client,
+    url: &str,
+    dir: &str,
+    file_name: &str,
+) -> ApplicationResult<()> {
     let resp = client.get(url).send().await.map_err(|e| {
         ApplicationError::Infrastructure(format!("Error descargando '{}': {}", url, e))
     })?;
     if !resp.status().is_success() {
-        return Err(ApplicationError::Infrastructure(
-            format!("HTTP {} al descargar '{}'", resp.status(), url),
-        ));
+        return Err(ApplicationError::Infrastructure(format!(
+            "HTTP {} al descargar '{}'",
+            resp.status(),
+            url
+        )));
     }
-    let bytes = resp.bytes().await.map_err(|e| {
-        ApplicationError::Infrastructure(format!("Error leyendo respuesta: {}", e))
-    })?;
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| ApplicationError::Infrastructure(format!("Error leyendo respuesta: {}", e)))?;
     let dest = format!("{}/{}", dir, file_name);
-    fs::write(&dest, &bytes).await.map_err(|e| {
-        ApplicationError::Infrastructure(format!("Error guardando '{}': {}", dest, e))
-    })
+    fs::write(&dest, &bytes)
+        .await
+        .map_err(|e| ApplicationError::Infrastructure(format!("Error guardando '{}': {}", dest, e)))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -442,7 +487,9 @@ mod tests {
         servers.save(&srv).await.unwrap();
         let repo = InMemoryModpackRepo::new();
         let installer = ModpackInstaller::new(servers, repo);
-        let result = installer.install(sid, "/no/such.mrpack", "/tmp", |_| {}).await;
+        let result = installer
+            .install(sid, "/no/such.mrpack", "/tmp", |_| {})
+            .await;
         assert!(result.is_err());
     }
 
@@ -460,8 +507,8 @@ mod tests {
 
     #[tokio::test]
     async fn install_real_mrpack() {
-        use tempfile::tempdir;
         use std::io::Write;
+        use tempfile::tempdir;
 
         let dir = tempdir().unwrap();
         let pack_path = dir.path().join("test.mrpack");
@@ -473,7 +520,11 @@ mod tests {
         {
             let f = std::fs::File::create(&pack_path).unwrap();
             let mut zip = zip::ZipWriter::new(f);
-            zip.start_file("modrinth.index.json", zip::write::SimpleFileOptions::default()).unwrap();
+            zip.start_file(
+                "modrinth.index.json",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
             zip.write_all(manifest.as_bytes()).unwrap();
             zip.finish().unwrap();
         }
@@ -486,17 +537,24 @@ mod tests {
         let install_dir = tempdir().unwrap();
         let installer = ModpackInstaller::new(servers, repo.clone());
 
-        let (mp, summary) = installer.install(
-            sid,
-            pack_path.to_str().unwrap(),
-            install_dir.path().to_str().unwrap(),
-            |_| {},
-        ).await.unwrap();
+        let (mp, summary) = installer
+            .install(
+                sid,
+                pack_path.to_str().unwrap(),
+                install_dir.path().to_str().unwrap(),
+                |_| {},
+            )
+            .await
+            .unwrap();
 
         assert_eq!(mp.format(), &ModpackFormat::Mrpack);
         assert_eq!(summary.name, "TestPack");
         assert_eq!(summary.total_files, 0);
-        assert!(summary.loader_info.as_deref().unwrap_or("").contains("fabric-loader"));
+        assert!(summary
+            .loader_info
+            .as_deref()
+            .unwrap_or("")
+            .contains("fabric-loader"));
         assert!(repo.find_by_id(mp.id()).await.unwrap().is_some());
     }
 }

@@ -1,19 +1,27 @@
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use cubed_domain::entities::{ServerSoftware, ServerStatus, Settings};
+use crate::event_bus::EventBus;
+use cubed_application::ports::PortManager;
+use cubed_application::ports::{
+    BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, JavaManager, ModRepository,
+    ModpackRepository, NetworkManager, ProcessManager, ResourceMonitor, ServerRepository,
+    TailscaleStatus,
+};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
-use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModpackRepository, ModRepository, NetworkManager, ProcessManager, ResourceMonitor, ServerRepository, TailscaleStatus};
 use cubed_application::use_cases::{DeleteBackup, ListBackups, ListMods};
 use cubed_application::CubedEvent;
-use cubed_infrastructure::{FileBackupManager, FileModManager, MinecraftConsoleManager, MinecraftProcessManager, ModpackInstaller, SysInfoResourceMonitor, TailscaleNetworkManager, TcpPortManager};
-use cubed_application::ports::PortManager;
-use crate::event_bus::EventBus;
+use cubed_domain::entities::{ServerSoftware, ServerStatus, Settings};
+use cubed_infrastructure::{
+    FileBackupManager, FileModManager, MinecraftConsoleManager, MinecraftProcessManager,
+    ModpackInstaller, SysInfoResourceMonitor, SystemJavaManager, TailscaleNetworkManager,
+    TcpPortManager,
+};
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -48,30 +56,34 @@ pub struct ConsoleLineEvent {
 // ── App state ─────────────────────────────────────────────────────────────────
 
 pub struct AppState {
-    pub repo:        Arc<dyn ServerRepository>,
-    pub fs:          Arc<dyn FileSystemManager>,
-    pub console:     Arc<MinecraftConsoleManager>,
+    pub repo: Arc<dyn ServerRepository>,
+    pub fs: Arc<dyn FileSystemManager>,
+    pub console: Arc<MinecraftConsoleManager>,
     pub process_mgr: Arc<MinecraftProcessManager>,
     /// Directorio base donde se almacenan los servidores.
     pub servers_dir: String,
-    pub resources:   Arc<SysInfoResourceMonitor>,
+    pub resources: Arc<SysInfoResourceMonitor>,
     pub backup_repo: Arc<dyn BackupRepository>,
-    pub backup_mgr:  Arc<FileBackupManager>,
-    pub mod_repo:      Arc<dyn ModRepository>,
-    pub mod_mgr:       Arc<FileModManager>,
-    pub modpack_repo:  Arc<dyn ModpackRepository>,
-    pub modpack_inst:  Arc<ModpackInstaller>,
-    pub network:       Arc<TailscaleNetworkManager>,
-    pub event_bus:     Arc<EventBus>,
+    pub backup_mgr: Arc<FileBackupManager>,
+    pub mod_repo: Arc<dyn ModRepository>,
+    pub mod_mgr: Arc<FileModManager>,
+    pub modpack_repo: Arc<dyn ModpackRepository>,
+    pub modpack_inst: Arc<ModpackInstaller>,
+    pub network: Arc<TailscaleNetworkManager>,
+    pub java_mgr: Arc<SystemJavaManager>,
+    pub event_bus: Arc<EventBus>,
     /// Configuración global mutable en memoria (persistida en futuras fases).
-    pub settings:      Arc<RwLock<Settings>>,
+    pub settings: Arc<RwLock<Settings>>,
 }
 
 // ── Server commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn list_servers(state: State<'_, AppState>) -> Result<Vec<ServerDto>, String> {
-    state.repo.find_all().await
+    state
+        .repo
+        .find_all()
+        .await
         .map_err(|e| e.to_string())
         .map(|v| v.iter().map(server_to_dto).collect())
 }
@@ -92,14 +104,17 @@ pub async fn create_server(
     }
     let software = parse_software(&cmd.software)?;
     let uc = CreateServer::new(state.repo.clone(), state.fs.clone());
-    let server = uc.execute(CreateServerInput {
-        name: cmd.name.trim().to_string(),
-        version: cmd.version,
-        software,
-        port: cmd.port,
-        java_path: cmd.java_path,
-        servers_dir: cmd.servers_dir,
-    }).await.map_err(|e| e.to_string())?;
+    let server = uc
+        .execute(CreateServerInput {
+            name: cmd.name.trim().to_string(),
+            version: cmd.version,
+            software,
+            port: cmd.port,
+            java_path: cmd.java_path,
+            servers_dir: cmd.servers_dir,
+        })
+        .await
+        .map_err(|e| e.to_string())?;
     info!(server_id = %server.id(), name = %server.name(), "server created");
     Ok(server_to_dto(&server))
 }
@@ -111,17 +126,21 @@ pub async fn start_server(
     state: State<'_, AppState>,
 ) -> Result<ServerDto, String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    let mut server = state.repo.find_by_id(uuid).await
+    let mut server = state
+        .repo
+        .find_by_id(uuid)
+        .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
 
-    let work_dir  = format!("{}/{}", state.servers_dir, server.name());
-    let jar_path  = format!("{}/server.jar", work_dir);
+    let work_dir = format!("{}/{}", state.servers_dir, server.name());
+    let jar_path = format!("{}/server.jar", work_dir);
 
     // Reject early if JAR is missing
     if !std::path::Path::new(&jar_path).exists() {
         return Err(format!(
-            "JAR no encontrado en '{}'. Descarga el servidor primero.", jar_path
+            "JAR no encontrado en '{}'. Descarga el servidor primero.",
+            jar_path
         ));
     }
 
@@ -130,8 +149,15 @@ pub async fn start_server(
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
 
     // Spawn actual Java process
-    let (pid, stdin, stdout, stderr) = state.process_mgr
-        .spawn_with_io(uuid, server.java_path().as_str(), &jar_path, &work_dir, 2048)
+    let (pid, stdin, stdout, stderr) = state
+        .process_mgr
+        .spawn_with_io(
+            uuid,
+            server.java_path().as_str(),
+            &jar_path,
+            &work_dir,
+            2048,
+        )
         .await
         .map_err(|e| e.to_string())?;
 
@@ -145,49 +171,56 @@ pub async fn start_server(
     //   2. Detects the "Done" line → marks Running
     //   3. Detects a crash / process end → marks Crashed
     let event_name = format!("console-line:{}", id);
-    let app_cb    = app.clone();
-    let repo_cb   = state.repo.clone();
-    let eb_cb     = state.event_bus.clone();
-    let running   = Arc::new(AtomicBool::new(false));
-    let running2  = running.clone();
+    let app_cb = app.clone();
+    let repo_cb = state.repo.clone();
+    let eb_cb = state.event_bus.clone();
+    let running = Arc::new(AtomicBool::new(false));
+    let running2 = running.clone();
 
-    state.console.attach(uuid, Box::new(move |line: ConsoleLine| {
-        // Forward to frontend
-        let evt = ConsoleLineEvent {
-            server_id: line.server_id.to_string(),
-            is_stdout: line.is_stdout,
-            text: line.text.clone(),
-        };
-        app_cb.emit(&event_name, evt).ok();
+    state
+        .console
+        .attach(
+            uuid,
+            Box::new(move |line: ConsoleLine| {
+                // Forward to frontend
+                let evt = ConsoleLineEvent {
+                    server_id: line.server_id.to_string(),
+                    is_stdout: line.is_stdout,
+                    text: line.text.clone(),
+                };
+                app_cb.emit(&event_name, evt).ok();
 
-        // Detect "Done (X.XXXs)! For help, type "help"" from Minecraft
-        if line.is_stdout
-            && !running2.load(Ordering::Relaxed)
-            && line.text.contains("Done")
-            && line.text.contains("For help")
-        {
-            running2.store(true, Ordering::Relaxed);
-            let repo = repo_cb.clone();
-            let eb   = eb_cb.clone();
-            tokio::spawn(async move {
-                if let Ok(Some(mut srv)) = repo.find_by_id(uuid).await {
-                    if srv.mark_running().is_ok() {
-                        let _ = repo.save(&srv).await;
-                        eb.emit(CubedEvent::ServerStarted { server_id: uuid });
-                        info!(server_id = %uuid, "server is now Running");
-                    }
+                // Detect "Done (X.XXXs)! For help, type "help"" from Minecraft
+                if line.is_stdout
+                    && !running2.load(Ordering::Relaxed)
+                    && line.text.contains("Done")
+                    && line.text.contains("For help")
+                {
+                    running2.store(true, Ordering::Relaxed);
+                    let repo = repo_cb.clone();
+                    let eb = eb_cb.clone();
+                    tokio::spawn(async move {
+                        if let Ok(Some(mut srv)) = repo.find_by_id(uuid).await {
+                            if srv.mark_running().is_ok() {
+                                let _ = repo.save(&srv).await;
+                                eb.emit(CubedEvent::ServerStarted { server_id: uuid });
+                                info!(server_id = %uuid, "server is now Running");
+                            }
+                        }
+                    });
                 }
-            });
-        }
-    })).await.map_err(|e| e.to_string())?;
+            }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Start reading stdout/stderr (lines go through the callback above)
     state.console.spawn_readers(uuid, stdout, stderr).await;
 
     // Background watcher: when the process dies, mark offline or crashed
-    let repo_w   = state.repo.clone();
-    let proc_w   = state.process_mgr.clone();
-    let eb_w     = state.event_bus.clone();
+    let repo_w = state.repo.clone();
+    let proc_w = state.process_mgr.clone();
+    let eb_w = state.event_bus.clone();
     let console_w = state.console.clone();
     let running_w = running.clone();
     tokio::spawn(async move {
@@ -202,7 +235,7 @@ pub async fn start_server(
         console_w.detach(uuid).await;
         if let Ok(Some(mut srv)) = repo_w.find_by_id(uuid).await {
             let was_stopping = *srv.status() == cubed_domain::entities::ServerStatus::Stopping;
-            let was_running  = running_w.load(Ordering::Relaxed);
+            let was_running = running_w.load(Ordering::Relaxed);
             if was_stopping || was_running {
                 // Clean shutdown path: Stopping → Offline
                 let _ = srv.mark_offline();
@@ -222,7 +255,10 @@ pub async fn start_server(
 #[tauri::command]
 pub async fn stop_server(id: String, state: State<'_, AppState>) -> Result<ServerDto, String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    let mut server = state.repo.find_by_id(uuid).await
+    let mut server = state
+        .repo
+        .find_by_id(uuid)
+        .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
 
@@ -236,7 +272,9 @@ pub async fn stop_server(id: String, state: State<'_, AppState>) -> Result<Serve
         state.process_mgr.kill(uuid).await.ok();
     }
 
-    state.event_bus.emit(CubedEvent::ServerStopped { server_id: uuid });
+    state
+        .event_bus
+        .emit(CubedEvent::ServerStopped { server_id: uuid });
     info!(server_id = %uuid, "server stop requested");
     Ok(server_to_dto(&server))
 }
@@ -244,7 +282,10 @@ pub async fn stop_server(id: String, state: State<'_, AppState>) -> Result<Serve
 #[tauri::command]
 pub async fn delete_server(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    let server = state.repo.find_by_id(uuid).await
+    let server = state
+        .repo
+        .find_by_id(uuid)
+        .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
     if server.is_running() {
@@ -272,20 +313,29 @@ pub async fn subscribe_console(
     let app_clone = app.clone();
     let event_clone = event_name.clone();
 
-    state.console
-        .attach(uuid, Box::new(move |line: ConsoleLine| {
-            let evt = ConsoleLineEvent {
-                server_id: line.server_id.to_string(),
-                is_stdout: line.is_stdout,
-                text: line.text,
-            };
-            app_clone.emit(&event_clone, evt).ok();
-        }))
+    state
+        .console
+        .attach(
+            uuid,
+            Box::new(move |line: ConsoleLine| {
+                let evt = ConsoleLineEvent {
+                    server_id: line.server_id.to_string(),
+                    is_stdout: line.is_stdout,
+                    text: line.text,
+                };
+                app_clone.emit(&event_clone, evt).ok();
+            }),
+        )
         .await
         .map_err(|e| e.to_string())?;
 
     // Return current buffer snapshot for immediate display
-    Ok(state.console.tail(uuid, 500).into_iter().map(line_to_event).collect())
+    Ok(state
+        .console
+        .tail(uuid, 500)
+        .into_iter()
+        .map(line_to_event)
+        .collect())
 }
 
 /// Envía un comando a stdin del servidor.
@@ -296,7 +346,8 @@ pub async fn send_console_command(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    state.console
+    state
+        .console
         .send_command(uuid, &command)
         .await
         .map_err(|e| e.to_string())
@@ -310,7 +361,12 @@ pub async fn get_console_tail(
     state: State<'_, AppState>,
 ) -> Result<Vec<ConsoleLineEvent>, String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    Ok(state.console.tail(uuid, n).into_iter().map(line_to_event).collect())
+    Ok(state
+        .console
+        .tail(uuid, n)
+        .into_iter()
+        .map(line_to_event)
+        .collect())
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -323,25 +379,30 @@ fn server_to_dto(s: &cubed_domain::entities::Server) -> ServerDto {
         software: s.software().to_string(),
         port: s.port().value(),
         status: match s.status() {
-            ServerStatus::Offline  => "offline",
+            ServerStatus::Offline => "offline",
             ServerStatus::Starting => "starting",
-            ServerStatus::Running  => "running",
+            ServerStatus::Running => "running",
             ServerStatus::Stopping => "stopping",
-            ServerStatus::Crashed  => "crashed",
-        }.to_string(),
+            ServerStatus::Crashed => "crashed",
+        }
+        .to_string(),
     }
 }
 
 fn line_to_event(l: ConsoleLine) -> ConsoleLineEvent {
-    ConsoleLineEvent { server_id: l.server_id.to_string(), is_stdout: l.is_stdout, text: l.text }
+    ConsoleLineEvent {
+        server_id: l.server_id.to_string(),
+        is_stdout: l.is_stdout,
+        text: l.text,
+    }
 }
 
 fn parse_software(s: &str) -> Result<ServerSoftware, String> {
     match s {
-        "Paper"    => Ok(ServerSoftware::Paper),
-        "Purpur"   => Ok(ServerSoftware::Purpur),
-        "Fabric"   => Ok(ServerSoftware::Fabric),
-        "Forge"    => Ok(ServerSoftware::Forge),
+        "Paper" => Ok(ServerSoftware::Paper),
+        "Purpur" => Ok(ServerSoftware::Purpur),
+        "Fabric" => Ok(ServerSoftware::Fabric),
+        "Forge" => Ok(ServerSoftware::Forge),
         "NeoForge" => Ok(ServerSoftware::NeoForge),
         other => Err(format!("Software desconocido: {}", other)),
     }
@@ -370,7 +431,11 @@ pub struct ServerStatsDto {
 
 #[tauri::command]
 pub async fn get_system_stats(state: State<'_, AppState>) -> Result<SystemStatsDto, String> {
-    let s = state.resources.system_stats().await.map_err(|e| e.to_string())?;
+    let s = state
+        .resources
+        .system_stats()
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(SystemStatsDto {
         cpu_percent: s.cpu_percent,
         ram_used_bytes: s.ram_used_bytes,
@@ -389,7 +454,11 @@ pub async fn get_server_stats(
     state: State<'_, AppState>,
 ) -> Result<Option<ServerStatsDto>, String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    let opt = state.resources.server_stats(uuid, pid).await.map_err(|e| e.to_string())?;
+    let opt = state
+        .resources
+        .server_stats(uuid, pid)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(opt.map(|s| ServerStatsDto {
         server_id: s.server_id.to_string(),
         cpu_percent: s.cpu_percent,
@@ -429,11 +498,15 @@ pub async fn create_backup(
     state: State<'_, AppState>,
 ) -> Result<BackupDto, String> {
     let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
-    let backup = state.backup_mgr
+    let backup = state
+        .backup_mgr
         .backup_server(uuid, &server_name, &server_dir)
         .await
         .map_err(|e| e.to_string())?;
-    state.event_bus.emit(CubedEvent::BackupCreated { server_id: uuid, backup_id: backup.id() });
+    state.event_bus.emit(CubedEvent::BackupCreated {
+        server_id: uuid,
+        backup_id: backup.id(),
+    });
     debug!(server_id = %uuid, backup_id = %backup.id(), "backup created");
     Ok(backup_to_dto(&backup))
 }
@@ -458,7 +531,8 @@ pub async fn restore_backup(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let uuid = Uuid::parse_str(&backup_id).map_err(|e| e.to_string())?;
-    state.backup_mgr
+    state
+        .backup_mgr
         .restore_backup(uuid, &restore_dir)
         .await
         .map_err(|e| e.to_string())
@@ -520,7 +594,8 @@ pub async fn install_mod(
     state: State<'_, AppState>,
 ) -> Result<ModDto, String> {
     let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
-    let entry = state.mod_mgr
+    let entry = state
+        .mod_mgr
         .install_mod(uuid, &source_path, &mods_dir)
         .await
         .map_err(|e| e.to_string())?;
@@ -529,12 +604,13 @@ pub async fn install_mod(
 
 /// Elimina un mod: borra el .jar y lo quita del registro.
 #[tauri::command]
-pub async fn remove_mod(
-    mod_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn remove_mod(mod_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let uuid = Uuid::parse_str(&mod_id).map_err(|e| e.to_string())?;
-    state.mod_mgr.remove_mod(uuid).await.map_err(|e| e.to_string())
+    state
+        .mod_mgr
+        .remove_mod(uuid)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Valida si un archivo es un .jar válido (cabecera PK).
@@ -591,13 +667,17 @@ pub async fn install_modpack(
     let app_clone = app.clone();
     let event_clone = event_name.clone();
 
-    let (modpack, summary) = state.modpack_inst
+    let (modpack, summary) = state
+        .modpack_inst
         .install(uuid, &source_path, &install_dir, move |progress| {
-            let _ = app_clone.emit(&event_clone, serde_json::json!({
-                "total": progress.total,
-                "done":  progress.done,
-                "file":  progress.current_file,
-            }));
+            let _ = app_clone.emit(
+                &event_clone,
+                serde_json::json!({
+                    "total": progress.total,
+                    "done":  progress.done,
+                    "file":  progress.current_file,
+                }),
+            );
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -618,7 +698,8 @@ pub async fn list_modpacks(
     state: State<'_, AppState>,
 ) -> Result<Vec<ModpackDto>, String> {
     let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
-    let mut list = state.modpack_repo
+    let mut list = state
+        .modpack_repo
         .find_by_server(uuid)
         .await
         .map_err(|e| e.to_string())?;
@@ -628,12 +709,13 @@ pub async fn list_modpacks(
 
 /// Elimina el registro de un modpack (no borra los mods ya instalados).
 #[tauri::command]
-pub async fn delete_modpack(
-    modpack_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn delete_modpack(modpack_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let uuid = Uuid::parse_str(&modpack_id).map_err(|e| e.to_string())?;
-    state.modpack_repo.delete(uuid).await.map_err(|e| e.to_string())
+    state
+        .modpack_repo
+        .delete(uuid)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ── Network / Tailscale commands ──────────────────────────────────────────────
@@ -648,8 +730,16 @@ pub struct TailscaleStatusDto {
 
 fn tailscale_status_to_dto(s: TailscaleStatus) -> TailscaleStatusDto {
     match s {
-        TailscaleStatus::NotInstalled => TailscaleStatusDto { state: "not_installed".into(), ip: None, hostname: None },
-        TailscaleStatus::Disconnected => TailscaleStatusDto { state: "disconnected".into(), ip: None, hostname: None },
+        TailscaleStatus::NotInstalled => TailscaleStatusDto {
+            state: "not_installed".into(),
+            ip: None,
+            hostname: None,
+        },
+        TailscaleStatus::Disconnected => TailscaleStatusDto {
+            state: "disconnected".into(),
+            ip: None,
+            hostname: None,
+        },
         TailscaleStatus::Connected { ip, hostname } => TailscaleStatusDto {
             state: "connected".into(),
             ip: Some(ip),
@@ -661,7 +751,11 @@ fn tailscale_status_to_dto(s: TailscaleStatus) -> TailscaleStatusDto {
 /// Detecta si Tailscale está instalado en el sistema.
 #[tauri::command]
 pub async fn tailscale_is_installed(state: State<'_, AppState>) -> Result<bool, String> {
-    state.network.is_installed().await.map_err(|e| e.to_string())
+    state
+        .network
+        .is_installed()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Devuelve el estado actual de Tailscale (not_installed | disconnected | connected).
@@ -674,7 +768,11 @@ pub async fn tailscale_status(state: State<'_, AppState>) -> Result<TailscaleSta
 /// Devuelve la IP de Tailscale si está conectado.
 #[tauri::command]
 pub async fn tailscale_ip(state: State<'_, AppState>) -> Result<Option<String>, String> {
-    state.network.tailscale_ip().await.map_err(|e| e.to_string())
+    state
+        .network
+        .tailscale_ip()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Devuelve el primer puerto libre >= 25565 que no esté en uso por el SO
@@ -682,20 +780,21 @@ pub async fn tailscale_ip(state: State<'_, AppState>) -> Result<Option<String>, 
 #[tauri::command]
 pub async fn suggest_free_port(state: State<'_, AppState>) -> Result<u16, String> {
     let mgr = TcpPortManager::new();
-    let used: std::collections::HashSet<u16> = state.repo
-        .find_all().await.map_err(|e| e.to_string())?
-        .iter().map(|s| s.port().value()).collect();
+    let used: std::collections::HashSet<u16> = state
+        .repo
+        .find_all()
+        .await
+        .map_err(|e| e.to_string())?
+        .iter()
+        .map(|s| s.port().value())
+        .collect();
 
-    let mut candidate = 25565u16;
-    loop {
-        if candidate > 65535 {
-            return Err("No se encontró un puerto libre".into());
-        }
+    for candidate in 25565u16..=65534 {
         if !used.contains(&candidate) && mgr.is_free(candidate).await.unwrap_or(false) {
             return Ok(candidate);
         }
-        candidate += 1;
     }
+    Err("No se encontró un puerto libre".into())
 }
 
 /// Construye la dirección de conexión al servidor: `<tailscale_ip>:<port>`.
@@ -706,10 +805,64 @@ pub async fn server_connect_address(
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
     let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
-    let server = state.repo.find_by_id(uuid).await.map_err(|e| e.to_string())?
+    let server = state
+        .repo
+        .find_by_id(uuid)
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", server_id))?;
-    let ip = state.network.tailscale_ip().await.map_err(|e| e.to_string())?;
+    let ip = state
+        .network
+        .tailscale_ip()
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(ip.map(|addr| format!("{}:{}", addr, server.port().value())))
+}
+
+// ── Java detection commands ───────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct JavaInstallationDto {
+    pub path: String,
+    pub major_version: u32,
+    pub version_string: String,
+}
+
+/// Devuelve todas las instalaciones de Java encontradas en el sistema.
+#[tauri::command]
+pub async fn detect_java(state: State<'_, AppState>) -> Result<Vec<JavaInstallationDto>, String> {
+    let installations = state
+        .java_mgr
+        .detect_installations()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(installations
+        .into_iter()
+        .map(|j| JavaInstallationDto {
+            path: j.path,
+            major_version: j.major_version,
+            version_string: j.version_string,
+        })
+        .collect())
+}
+
+/// Selecciona la instalación de Java más adecuada para una versión de Minecraft.
+/// Devuelve la ruta al ejecutable.
+#[tauri::command]
+pub async fn select_java_for_version(
+    mc_version: String,
+    state: State<'_, AppState>,
+) -> Result<JavaInstallationDto, String> {
+    let inst = state
+        .java_mgr
+        .select_for_version(&mc_version)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(JavaInstallationDto {
+        path: inst.path,
+        major_version: inst.major_version,
+        version_string: inst.version_string,
+    })
 }
 
 // ── Settings commands ─────────────────────────────────────────────────────────
@@ -717,31 +870,31 @@ pub async fn server_connect_address(
 /// DTO de configuración expuesto al frontend.
 #[derive(Serialize, Clone)]
 pub struct SettingsDto {
-    pub servers_dir:           String,
-    pub backups_dir:           String,
-    pub downloads_dir:         String,
-    pub default_java_path:     String,
+    pub servers_dir: String,
+    pub backups_dir: String,
+    pub downloads_dir: String,
+    pub default_java_path: String,
     /// Intervalo de backup automático en segundos (0 = desactivado).
-    pub backup_interval_secs:  u64,
+    pub backup_interval_secs: u64,
 }
 
 #[derive(Deserialize)]
 pub struct SaveSettingsCmd {
-    pub servers_dir:           String,
-    pub backups_dir:           String,
-    pub downloads_dir:         String,
-    pub default_java_path:     String,
-    pub backup_interval_secs:  u64,
+    pub servers_dir: String,
+    pub backups_dir: String,
+    pub downloads_dir: String,
+    pub default_java_path: String,
+    pub backup_interval_secs: u64,
 }
 
 #[tauri::command]
 pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsDto, String> {
     let s = state.settings.read().await;
     Ok(SettingsDto {
-        servers_dir:          s.servers_dir.clone(),
-        backups_dir:          s.backups_dir.clone(),
-        downloads_dir:        s.downloads_dir.clone(),
-        default_java_path:    s.default_java_path.clone(),
+        servers_dir: s.servers_dir.clone(),
+        backups_dir: s.backups_dir.clone(),
+        downloads_dir: s.downloads_dir.clone(),
+        default_java_path: s.default_java_path.clone(),
         backup_interval_secs: s.backup_interval_secs,
     })
 }
@@ -761,28 +914,32 @@ pub async fn save_settings(
 
     {
         let mut s = state.settings.write().await;
-        s.servers_dir          = cmd.servers_dir.trim().to_string();
-        s.backups_dir          = cmd.backups_dir.trim().to_string();
-        s.downloads_dir        = cmd.downloads_dir.trim().to_string();
-        s.default_java_path    = cmd.default_java_path.trim().to_string();
+        s.servers_dir = cmd.servers_dir.trim().to_string();
+        s.backups_dir = cmd.backups_dir.trim().to_string();
+        s.downloads_dir = cmd.downloads_dir.trim().to_string();
+        s.default_java_path = cmd.default_java_path.trim().to_string();
         s.backup_interval_secs = cmd.backup_interval_secs;
     }
 
     // Reschedule automatic backup with the new interval
     {
         let s = state.settings.read().await;
-        state.backup_mgr
+        state
+            .backup_mgr
             .restart_auto_backup(s.backup_interval_secs, s.servers_dir.clone())
             .await;
-        info!(interval_secs = s.backup_interval_secs, "backup scheduler updated");
+        info!(
+            interval_secs = s.backup_interval_secs,
+            "backup scheduler updated"
+        );
     }
 
     let s = state.settings.read().await;
     Ok(SettingsDto {
-        servers_dir:          s.servers_dir.clone(),
-        backups_dir:          s.backups_dir.clone(),
-        downloads_dir:        s.downloads_dir.clone(),
-        default_java_path:    s.default_java_path.clone(),
+        servers_dir: s.servers_dir.clone(),
+        backups_dir: s.backups_dir.clone(),
+        downloads_dir: s.downloads_dir.clone(),
+        default_java_path: s.default_java_path.clone(),
         backup_interval_secs: s.backup_interval_secs,
     })
 }

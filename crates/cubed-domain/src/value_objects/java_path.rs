@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::error::{DomainError, DomainResult};
+use serde::{Deserialize, Serialize};
 
 /// Ruta absoluta al binario de Java.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -9,7 +9,9 @@ impl JavaPath {
     pub fn new(value: impl Into<String>) -> DomainResult<Self> {
         let value = value.into();
         if value.is_empty() {
-            return Err(DomainError::Validation("La ruta de Java no puede estar vacía".into()));
+            return Err(DomainError::Validation(
+                "La ruta de Java no puede estar vacía".into(),
+            ));
         }
         if !value.starts_with('/') {
             return Err(DomainError::Validation(
@@ -19,7 +21,9 @@ impl JavaPath {
         Ok(Self(value))
     }
 
-    pub fn as_str(&self) -> &str { &self.0 }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl std::fmt::Display for JavaPath {
@@ -33,9 +37,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn valid_path() { assert!(JavaPath::new("/usr/bin/java").is_ok()); }
+    fn valid_path() {
+        assert!(JavaPath::new("/usr/bin/java").is_ok());
+    }
     #[test]
-    fn relative_path_fails() { assert!(JavaPath::new("usr/bin/java").is_err()); }
+    fn relative_path_fails() {
+        assert!(JavaPath::new("usr/bin/java").is_err());
+    }
     #[test]
-    fn empty_fails() { assert!(JavaPath::new("").is_err()); }
+    fn empty_fails() {
+        assert!(JavaPath::new("").is_err());
+    }
 }

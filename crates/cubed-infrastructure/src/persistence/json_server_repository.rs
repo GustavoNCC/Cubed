@@ -1,15 +1,15 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::sync::Mutex;
+use tracing::{error, info, warn};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use tracing::{info, warn, error};
 
-use cubed_domain::entities::{Server, ServerSoftware, ServerStatus};
-use cubed_domain::value_objects::{JavaPath, ServerName, ServerPort, ServerVersion};
 use cubed_application::error::{ApplicationError, ApplicationResult};
 use cubed_application::ports::ServerRepository;
+use cubed_domain::entities::{Server, ServerSoftware, ServerStatus};
+use cubed_domain::value_objects::{JavaPath, ServerName, ServerPort, ServerVersion};
 
 /// Registro serializable — espejo plano de la entidad Server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,26 +29,36 @@ impl TryFrom<ServerRecord> for Server {
     type Error = ApplicationError;
 
     fn try_from(r: ServerRecord) -> Result<Self, Self::Error> {
-        let name     = ServerName::new(&r.name)?;
-        let version  = ServerVersion::new(&r.version)?;
-        let port     = ServerPort::new(r.port)?;
-        let java     = JavaPath::new(&r.java_path)?;
+        let name = ServerName::new(&r.name)?;
+        let version = ServerVersion::new(&r.version)?;
+        let port = ServerPort::new(r.port)?;
+        let java = JavaPath::new(&r.java_path)?;
         let software = parse_software(&r.software)?;
-        let status   = parse_status(&r.status)?;
-        Ok(Server::reconstitute(r.id, name, version, software, port, java, status, r.created_at, r.updated_at))
+        let status = parse_status(&r.status)?;
+        Ok(Server::reconstitute(
+            r.id,
+            name,
+            version,
+            software,
+            port,
+            java,
+            status,
+            r.created_at,
+            r.updated_at,
+        ))
     }
 }
 
 impl From<&Server> for ServerRecord {
     fn from(s: &Server) -> Self {
         Self {
-            id:         s.id(),
-            name:       s.name().as_str().to_owned(),
-            version:    s.version().as_str().to_owned(),
-            software:   s.software().to_string(),
-            port:       s.port().value(),
-            java_path:  s.java_path().as_str().to_owned(),
-            status:     s.status().to_string(),
+            id: s.id(),
+            name: s.name().as_str().to_owned(),
+            version: s.version().as_str().to_owned(),
+            software: s.software().to_string(),
+            port: s.port().value(),
+            java_path: s.java_path().as_str().to_owned(),
+            status: s.status().to_string(),
             created_at: s.created_at(),
             updated_at: s.updated_at(),
         }
@@ -57,47 +67,59 @@ impl From<&Server> for ServerRecord {
 
 fn parse_software(s: &str) -> ApplicationResult<ServerSoftware> {
     match s {
-        "Paper"    => Ok(ServerSoftware::Paper),
-        "Purpur"   => Ok(ServerSoftware::Purpur),
-        "Fabric"   => Ok(ServerSoftware::Fabric),
-        "Forge"    => Ok(ServerSoftware::Forge),
+        "Paper" => Ok(ServerSoftware::Paper),
+        "Purpur" => Ok(ServerSoftware::Purpur),
+        "Fabric" => Ok(ServerSoftware::Fabric),
+        "Forge" => Ok(ServerSoftware::Forge),
         "NeoForge" => Ok(ServerSoftware::NeoForge),
-        other => Err(ApplicationError::Infrastructure(format!("Software desconocido: '{other}'"))),
+        other => Err(ApplicationError::Infrastructure(format!(
+            "Software desconocido: '{other}'"
+        ))),
     }
 }
 
 fn parse_status(s: &str) -> ApplicationResult<ServerStatus> {
     match s {
-        "offline"  | "starting" | "running" | "stopping" => Ok(ServerStatus::Offline),
-        "crashed"  => Ok(ServerStatus::Crashed),
-        other => Err(ApplicationError::Infrastructure(format!("Estado desconocido: '{other}'"))),
+        "offline" | "starting" | "running" | "stopping" => Ok(ServerStatus::Offline),
+        "crashed" => Ok(ServerStatus::Crashed),
+        other => Err(ApplicationError::Infrastructure(format!(
+            "Estado desconocido: '{other}'"
+        ))),
     }
 }
 
 /// Repositorio JSON — persiste los servidores en un archivo JSON local.
 /// Las escrituras se hacen atómicamente vía archivo temporal + rename.
 pub struct JsonServerRepository {
-    path:  PathBuf,
+    path: PathBuf,
     write_lock: Mutex<()>,
 }
 
 impl JsonServerRepository {
     pub fn new(path: PathBuf) -> Self {
         info!(path = %path.display(), "JsonServerRepository iniciado");
-        Self { path, write_lock: Mutex::new(()) }
+        Self {
+            path,
+            write_lock: Mutex::new(()),
+        }
     }
 
     fn load_records(&self) -> ApplicationResult<Vec<ServerRecord>> {
         if !self.path.exists() {
             return Ok(Vec::new());
         }
-        let raw = std::fs::read_to_string(&self.path)
-            .map_err(|e| ApplicationError::Infrastructure(format!("Error leyendo {}: {e}", self.path.display())))?;
+        let raw = std::fs::read_to_string(&self.path).map_err(|e| {
+            ApplicationError::Infrastructure(format!("Error leyendo {}: {e}", self.path.display()))
+        })?;
         if raw.trim().is_empty() {
             return Ok(Vec::new());
         }
-        serde_json::from_str::<Vec<ServerRecord>>(&raw)
-            .map_err(|e| ApplicationError::Infrastructure(format!("JSON corrupto en {}: {e}", self.path.display())))
+        serde_json::from_str::<Vec<ServerRecord>>(&raw).map_err(|e| {
+            ApplicationError::Infrastructure(format!(
+                "JSON corrupto en {}: {e}",
+                self.path.display()
+            ))
+        })
     }
 
     fn save_records(&self, records: &[ServerRecord]) -> ApplicationResult<()> {

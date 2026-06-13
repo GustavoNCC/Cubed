@@ -28,11 +28,15 @@ const CANDIDATE_PATHS: &[&str] = &[
 pub struct TailscaleNetworkManager;
 
 impl TailscaleNetworkManager {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     fn find_binary() -> Option<String> {
         // 1. Try PATH first
-        if which("tailscale") { return Some("tailscale".into()); }
+        if which("tailscale") {
+            return Some("tailscale".into());
+        }
         // 2. Try known paths
         for path in CANDIDATE_PATHS {
             if std::path::Path::new(path).exists() {
@@ -44,7 +48,9 @@ impl TailscaleNetworkManager {
 }
 
 impl Default for TailscaleNetworkManager {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn which(binary: &str) -> bool {
@@ -71,15 +77,17 @@ impl NetworkManager for TailscaleNetworkManager {
             .args(["status", "--json"])
             .output()
             .await
-            .map_err(|e| ApplicationError::Infrastructure(format!("tailscale status falló: {}", e)))?;
+            .map_err(|e| {
+                ApplicationError::Infrastructure(format!("tailscale status falló: {}", e))
+            })?;
 
         if !out.status.success() {
             // Tailscale installed but not running / not logged in
             return Ok(TailscaleStatus::Disconnected);
         }
 
-        let json: serde_json::Value = serde_json::from_slice(&out.stdout)
-            .unwrap_or(serde_json::Value::Null);
+        let json: serde_json::Value =
+            serde_json::from_slice(&out.stdout).unwrap_or(serde_json::Value::Null);
 
         // BackendState: "Running" means connected
         let backend_state = json
@@ -137,9 +145,9 @@ mod tests {
         let status = mgr.status().await.unwrap();
         // Must be one of the three variants — no panic, no error
         match status {
-            TailscaleStatus::NotInstalled |
-            TailscaleStatus::Disconnected |
-            TailscaleStatus::Connected { .. } => {}
+            TailscaleStatus::NotInstalled
+            | TailscaleStatus::Disconnected
+            | TailscaleStatus::Connected { .. } => {}
         }
     }
 

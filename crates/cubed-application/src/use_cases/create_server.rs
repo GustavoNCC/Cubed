@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use cubed_domain::entities::{Server, ServerSoftware};
-use cubed_domain::value_objects::{JavaPath, ServerName, ServerPort, ServerVersion};
 use crate::error::{ApplicationError, ApplicationResult};
 use crate::ports::{FileSystemManager, ServerRepository};
+use cubed_domain::entities::{Server, ServerSoftware};
+use cubed_domain::value_objects::{JavaPath, ServerName, ServerPort, ServerVersion};
+use std::sync::Arc;
 
 pub struct CreateServerInput {
     pub name: String,
@@ -31,14 +31,17 @@ impl CreateServer {
         let java_path = JavaPath::new(&input.java_path)?;
 
         if self.repo.port_in_use(port.value()).await? {
-            return Err(ApplicationError::Infrastructure(
-                format!("El puerto {} ya está en uso", port),
-            ));
+            return Err(ApplicationError::Infrastructure(format!(
+                "El puerto {} ya está en uso",
+                port
+            )));
         }
 
         let server = Server::new(name, version, input.software, port, java_path);
         self.repo.save(&server).await?;
-        self.fs.init_server_dirs(&input.servers_dir, server.name().as_str()).await?;
+        self.fs
+            .init_server_dirs(&input.servers_dir, server.name().as_str())
+            .await?;
         Ok(server)
     }
 }

@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::error::ApplicationResult;
+use async_trait::async_trait;
 
 /// Puerto para gestión de puertos de red.
 #[async_trait]

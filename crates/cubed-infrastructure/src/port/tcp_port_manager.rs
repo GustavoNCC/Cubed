@@ -15,11 +15,15 @@ fn port_is_free(port: u16) -> bool {
 pub struct TcpPortManager;
 
 impl TcpPortManager {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Default for TcpPortManager {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
@@ -35,21 +39,24 @@ impl PortManager for TcpPortManager {
                 return Ok(port);
             }
         }
-        Err(ApplicationError::Infrastructure(
-            format!("No hay puertos libres en el rango {}–{}", start, MAX_PORT),
-        ))
+        Err(ApplicationError::Infrastructure(format!(
+            "No hay puertos libres en el rango {}–{}",
+            start, MAX_PORT
+        )))
     }
 
     async fn validate(&self, port: u16) -> ApplicationResult<()> {
         if port < MIN_PORT {
-            return Err(ApplicationError::Infrastructure(
-                format!("El puerto {} está reservado (mínimo {})", port, MIN_PORT),
-            ));
+            return Err(ApplicationError::Infrastructure(format!(
+                "El puerto {} está reservado (mínimo {})",
+                port, MIN_PORT
+            )));
         }
         if !port_is_free(port) {
-            return Err(ApplicationError::Infrastructure(
-                format!("El puerto {} está ocupado por otro proceso", port),
-            ));
+            return Err(ApplicationError::Infrastructure(format!(
+                "El puerto {} está ocupado por otro proceso",
+                port
+            )));
         }
         Ok(())
     }
@@ -79,7 +86,10 @@ mod tests {
         let listener = TcpListener::bind("0.0.0.0:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let mgr = TcpPortManager::new();
-        assert!(!mgr.is_free(port).await.unwrap(), "bound port should not be free");
+        assert!(
+            !mgr.is_free(port).await.unwrap(),
+            "bound port should not be free"
+        );
         drop(listener);
     }
 

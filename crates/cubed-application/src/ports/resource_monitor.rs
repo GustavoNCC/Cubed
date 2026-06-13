@@ -1,6 +1,6 @@
+use crate::error::ApplicationResult;
 use async_trait::async_trait;
 use uuid::Uuid;
-use crate::error::ApplicationResult;
 
 /// Estadísticas globales del sistema anfitrión.
 #[derive(Debug, Clone)]
@@ -39,5 +39,9 @@ pub trait ResourceMonitor: Send + Sync {
     async fn system_stats(&self) -> ApplicationResult<SystemStats>;
     /// Estadísticas del proceso asociado a un servidor.
     /// Devuelve `None` si el proceso no está vivo.
-    async fn server_stats(&self, server_id: Uuid, pid: u32) -> ApplicationResult<Option<ServerStats>>;
+    async fn server_stats(
+        &self,
+        server_id: Uuid,
+        pid: u32,
+    ) -> ApplicationResult<Option<ServerStats>>;
 }

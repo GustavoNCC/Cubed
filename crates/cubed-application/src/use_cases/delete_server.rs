@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use uuid::Uuid;
-use cubed_domain::entities::ServerStatus;
 use crate::error::{ApplicationError, ApplicationResult};
 use crate::ports::{FileSystemManager, ServerRepository};
+use cubed_domain::entities::ServerStatus;
+use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct DeleteServer {
     repo: Arc<dyn ServerRepository>,
@@ -25,7 +25,9 @@ impl DeleteServer {
             ));
         }
 
-        self.fs.delete_server_dir(servers_dir, server.name().as_str()).await?;
+        self.fs
+            .delete_server_dir(servers_dir, server.name().as_str())
+            .await?;
         self.repo.delete(server_id).await
     }
 }

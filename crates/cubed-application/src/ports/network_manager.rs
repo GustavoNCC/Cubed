@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::error::ApplicationResult;
+use async_trait::async_trait;
 
 /// Estado de la conexión Tailscale.
 #[derive(Debug, Clone, PartialEq, Eq)]

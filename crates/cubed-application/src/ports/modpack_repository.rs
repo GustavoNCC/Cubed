@@ -1,7 +1,7 @@
-use async_trait::async_trait;
-use uuid::Uuid;
-use cubed_domain::entities::Modpack;
 use crate::error::ApplicationResult;
+use async_trait::async_trait;
+use cubed_domain::entities::Modpack;
+use uuid::Uuid;
 
 #[async_trait]
 pub trait ModpackRepository: Send + Sync {

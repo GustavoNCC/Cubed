@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::error::ApplicationResult;
+use async_trait::async_trait;
 
 /// Puerto para operaciones de sistema de archivos.
 /// La infraestructura lo implementa; la aplicación solo lo conoce como trait.
@@ -11,10 +11,15 @@ pub trait FileSystemManager: Send + Sync {
 
     /// Crea la estructura de directorios de un servidor específico:
     /// <servers_dir>/<name>/{mods,world,config,logs}
-    async fn init_server_dirs(&self, servers_dir: &str, server_name: &str) -> ApplicationResult<()>;
+    async fn init_server_dirs(&self, servers_dir: &str, server_name: &str)
+        -> ApplicationResult<()>;
 
     /// Elimina el directorio completo de un servidor.
-    async fn delete_server_dir(&self, servers_dir: &str, server_name: &str) -> ApplicationResult<()>;
+    async fn delete_server_dir(
+        &self,
+        servers_dir: &str,
+        server_name: &str,
+    ) -> ApplicationResult<()>;
 
     /// Devuelve la ruta al directorio de un servidor.
     fn server_dir(&self, servers_dir: &str, server_name: &str) -> String;

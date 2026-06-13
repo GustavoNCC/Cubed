@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use uuid::Uuid;
-use cubed_domain::entities::ServerStatus;
 use crate::error::{ApplicationError, ApplicationResult};
 use crate::ports::{ProcessManager, ServerRepository};
+use cubed_domain::entities::ServerStatus;
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// Parámetros para arrancar un servidor.
 pub struct RunServerInput {
@@ -26,14 +26,22 @@ impl RunServer {
     }
 
     pub async fn start(&self, input: RunServerInput) -> ApplicationResult<u32> {
-        let mut server = self.repo.find_by_id(input.server_id).await?.ok_or_else(|| {
-            ApplicationError::Infrastructure(format!("Servidor {} no encontrado", input.server_id))
-        })?;
+        let mut server = self
+            .repo
+            .find_by_id(input.server_id)
+            .await?
+            .ok_or_else(|| {
+                ApplicationError::Infrastructure(format!(
+                    "Servidor {} no encontrado",
+                    input.server_id
+                ))
+            })?;
 
         server.start()?;
         self.repo.save(&server).await?;
 
-        let pid = self.proc
+        let pid = self
+            .proc
             .spawn(
                 input.server_id,
                 server.java_path().as_str(),

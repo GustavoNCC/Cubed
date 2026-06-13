@@ -26,15 +26,18 @@ function pct(used: number, total: number): number {
   return Math.round((used / total) * 100);
 }
 
-interface NetRate { rx: number; tx: number }
+interface NetRate {
+  rx: number;
+  tx: number;
+}
 
 export function Dashboard({ servers }: Props) {
-  const total   = servers.length;
+  const total = servers.length;
   const running = servers.filter((s) => s.status === "running").length;
   const crashed = servers.filter((s) => s.status === "crashed").length;
   const offline = servers.filter((s) => s.status === "offline").length;
 
-  const [sys, setSys]         = useState<SystemStats | null>(null);
+  const [sys, setSys] = useState<SystemStats | null>(null);
   const [netRate, setNetRate] = useState<NetRate | null>(null);
   const prevNet = useRef<{ rx: number; tx: number; ts: number } | null>(null);
 
@@ -51,12 +54,22 @@ export function Dashboard({ servers }: Props) {
               const dt = (now - prevNet.current.ts) / 1000;
               if (dt > 0) {
                 setNetRate({
-                  rx: Math.max(0, (stats.net_rx_bytes - prevNet.current.rx) / dt),
-                  tx: Math.max(0, (stats.net_tx_bytes - prevNet.current.tx) / dt),
+                  rx: Math.max(
+                    0,
+                    (stats.net_rx_bytes - prevNet.current.rx) / dt,
+                  ),
+                  tx: Math.max(
+                    0,
+                    (stats.net_tx_bytes - prevNet.current.tx) / dt,
+                  ),
                 });
               }
             }
-            prevNet.current = { rx: stats.net_rx_bytes, tx: stats.net_tx_bytes, ts: now };
+            prevNet.current = {
+              rx: stats.net_rx_bytes,
+              tx: stats.net_tx_bytes,
+              ts: now,
+            };
           }
         } catch {
           // silently ignore — may fail in browser dev mode
@@ -65,22 +78,27 @@ export function Dashboard({ servers }: Props) {
       }
     }
     poll();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <CubedLogo size={28} className="opacity-90 drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]" />
+        <CubedLogo
+          size={28}
+          className="opacity-90 drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]"
+        />
         <h1 className="text-2xl font-bold">Dashboard</h1>
       </div>
 
       {/* Server counters */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Total"   value={total} />
+        <StatCard label="Total" value={total} />
         <StatCard label="Activos" value={running} accent="primary" />
         <StatCard label="Offline" value={offline} />
-        <StatCard label="Caídos"  value={crashed} accent="destructive" />
+        <StatCard label="Caídos" value={crashed} accent="destructive" />
       </div>
 
       {/* Network / Tailscale */}
@@ -91,7 +109,9 @@ export function Dashboard({ servers }: Props) {
       {/* System resources */}
       {sys && (
         <div>
-          <h2 className="text-sm font-medium text-muted-foreground mb-2">Recursos del sistema</h2>
+          <h2 className="text-sm font-medium text-muted-foreground mb-2">
+            Recursos del sistema
+          </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <ResourceCard
               icon={<Cpu className="h-4 w-4" />}
@@ -114,9 +134,11 @@ export function Dashboard({ servers }: Props) {
             <ResourceCard
               icon={<Network className="h-4 w-4" />}
               label="Red ↓/↑"
-              value={netRate
-                ? `${fmt_rate(netRate.rx)} / ${fmt_rate(netRate.tx)}`
-                : "Midiendo…"}
+              value={
+                netRate
+                  ? `${fmt_rate(netRate.rx)} / ${fmt_rate(netRate.tx)}`
+                  : "Midiendo…"
+              }
               bar={null}
             />
           </div>
@@ -126,17 +148,28 @@ export function Dashboard({ servers }: Props) {
       {total === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
           <p className="text-sm">No hay servidores todavía.</p>
-          <p className="text-xs mt-1">Ve a <strong>Servidores</strong> para crear el primero.</p>
+          <p className="text-xs mt-1">
+            Ve a <strong>Servidores</strong> para crear el primero.
+          </p>
         </div>
       ) : (
         <div>
-          <h2 className="text-sm font-medium text-muted-foreground mb-2">Actividad reciente</h2>
+          <h2 className="text-sm font-medium text-muted-foreground mb-2">
+            Actividad reciente
+          </h2>
           <ul className="divide-y rounded-lg border bg-card">
             {servers.slice(0, 5).map((s) => (
-              <li key={s.id} className="flex items-center justify-between px-4 py-3 text-sm">
+              <li
+                key={s.id}
+                className="flex items-center justify-between px-4 py-3 text-sm"
+              >
                 <span className="font-medium">{s.name}</span>
-                <span className="text-muted-foreground">{s.software} {s.version} · :{s.port}</span>
-                <span className={`text-xs ${s.status === "running" ? "text-primary" : s.status === "crashed" ? "text-destructive" : "text-muted-foreground"}`}>
+                <span className="text-muted-foreground">
+                  {s.software} {s.version} · :{s.port}
+                </span>
+                <span
+                  className={`text-xs ${s.status === "running" ? "text-primary" : s.status === "crashed" ? "text-destructive" : "text-muted-foreground"}`}
+                >
                   {s.status}
                 </span>
               </li>
@@ -148,11 +181,21 @@ export function Dashboard({ servers }: Props) {
   );
 }
 
-function StatCard({ label, value, accent }: { label: string; value: number; accent?: "primary" | "destructive" }) {
+function StatCard({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: number;
+  accent?: "primary" | "destructive";
+}) {
   return (
     <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className={`text-3xl font-bold ${accent === "primary" ? "text-primary" : accent === "destructive" ? "text-destructive" : "text-foreground"}`}>
+      <span
+        className={`text-3xl font-bold ${accent === "primary" ? "text-primary" : accent === "destructive" ? "text-destructive" : "text-foreground"}`}
+      >
         {value}
       </span>
     </div>
@@ -160,7 +203,10 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
 }
 
 function ResourceCard({
-  icon, label, value, bar,
+  icon,
+  label,
+  value,
+  bar,
 }: {
   icon: React.ReactNode;
   label: string;

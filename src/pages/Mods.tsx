@@ -1,5 +1,12 @@
-import { useEffect, useState } from "react";
-import { ChevronLeft, Package, Trash2, Upload, CheckCircle, XCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ChevronLeft,
+  Package,
+  Trash2,
+  Upload,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Server } from "../types";
@@ -17,19 +24,23 @@ interface Props {
 }
 
 export function Mods({ server, onBack }: Props) {
-  const [mods, setMods]       = useState<ModDto[]>([]);
+  const [mods, setMods] = useState<ModDto[]>([]);
   const [working, setWorking] = useState<string | null>(null);
-  const [error, setError]     = useState<string | null>(null);
-  const [info, setInfo]       = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
       const list = await invoke<ModDto[]>("list_mods", { serverId: server.id });
       setMods(list);
-    } catch (e) { setError(String(e)); }
-  }
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [server.id]);
 
-  useEffect(() => { refresh(); }, [server.id]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   async function handleInstall() {
     setError(null);
@@ -120,18 +131,25 @@ export function Mods({ server, onBack }: Props) {
         <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed text-center text-muted-foreground p-12">
           <div>
             <p className="text-sm">No hay mods instalados.</p>
-            <p className="text-xs mt-1">Pulsa <strong>Instalar mod</strong> para añadir un .jar.</p>
+            <p className="text-xs mt-1">
+              Pulsa <strong>Instalar mod</strong> para añadir un .jar.
+            </p>
           </div>
         </div>
       ) : (
         <ul className="divide-y rounded-lg border bg-card">
           {mods.map((m) => (
-            <li key={m.id} className="flex items-center justify-between px-4 py-3 gap-4">
+            <li
+              key={m.id}
+              className="flex items-center justify-between px-4 py-3 gap-4"
+            >
               <div className="flex items-center gap-2 min-w-0">
                 <Package className="h-4 w-4 text-primary shrink-0" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{m.file_name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{m.path}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {m.path}
+                  </p>
                 </div>
               </div>
               <button

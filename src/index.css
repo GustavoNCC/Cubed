@@ -3,55 +3,93 @@
 @tailwind utilities;
 
 @layer base {
+  /* ── Cyberpunk dark theme ───────────────────────────────────────────────── */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 142 71% 45%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 142 71% 45%;
-    --radius: 0.5rem;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-  }
+    --background: 224 47% 4%;
+    --foreground: 220 15% 92%;
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --primary: 142 71% 45%;
-    --primary-foreground: 144 80% 10%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 142 71% 45%;
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 210 40% 98%;
+    --card: 225 40% 6%;
+    --card-foreground: 220 15% 92%;
+
+    /* Primary — neon purple */
+    --primary: 270 85% 62%;
+    --primary-foreground: 270 30% 96%;
+
+    /* Secondary — muted violet */
+    --secondary: 260 25% 13%;
+    --secondary-foreground: 220 15% 80%;
+
+    --muted: 240 20% 10%;
+    --muted-foreground: 230 15% 50%;
+
+    /* Accent — neon pink */
+    --accent: 320 80% 58%;
+    --accent-foreground: 320 30% 96%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 262 25% 16%;
+    --input: 260 22% 12%;
+    --ring: 270 85% 62%;
+
+    --radius: 0.5rem;
+
+    --glow-purple: 0 0 14px hsla(270, 85%, 62%, 0.5);
+    --glow-pink: 0 0 14px hsla(320, 80%, 58%, 0.45);
   }
 
   * {
     @apply border-border;
   }
 
+  html {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+
+  /* Subtle scanline texture */
+  body::before {
+    content: "";
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      hsla(240, 20%, 4%, 0.05) 3px,
+      hsla(240, 20%, 4%, 0.05) 4px
+    );
   }
 }
 
 @layer components {
   .input {
-    @apply w-full rounded-md border bg-background px-3 py-1.5 text-sm outline-none
+    @apply w-full rounded-md border bg-input px-3 py-1.5 text-sm outline-none
+           text-foreground placeholder:text-muted-foreground
            focus:ring-2 focus:ring-ring focus:ring-offset-1 transition-shadow;
+  }
+
+  .neon-primary {
+    box-shadow: var(--glow-purple);
+  }
+
+  .neon-accent {
+    box-shadow: var(--glow-pink);
+  }
+
+  .neon-border {
+    border-color: hsl(var(--primary));
+    box-shadow:
+      var(--glow-purple),
+      inset 0 0 6px hsla(270, 85%, 62%, 0.12);
   }
 }

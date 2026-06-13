@@ -1,5 +1,12 @@
-import { useEffect, useState } from "react";
-import { ArchiveRestore, CheckCircle, ChevronLeft, Download, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ArchiveRestore,
+  CheckCircle,
+  ChevronLeft,
+  Download,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Server } from "../types";
 
@@ -27,22 +34,26 @@ function fmt_date(iso: string): string {
 }
 
 export function Backups({ server, onBack }: Props) {
-  const [backups, setBackups]   = useState<BackupDto[]>([]);
-  const [loading, setLoading]   = useState(false);
-  const [working, setWorking]   = useState<string | null>(null);
-  const [error, setError]       = useState<string | null>(null);
-  const [info, setInfo]         = useState<string | null>(null);
+  const [backups, setBackups] = useState<BackupDto[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [working, setWorking] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
-      const list = await invoke<BackupDto[]>("list_backups", { serverId: server.id });
+      const list = await invoke<BackupDto[]>("list_backups", {
+        serverId: server.id,
+      });
       setBackups(list);
     } catch (e) {
       setError(String(e));
     }
-  }
+  }, [server.id]);
 
-  useEffect(() => { refresh(); }, [server.id]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   async function handleCreate() {
     setLoading(true);
@@ -50,9 +61,9 @@ export function Backups({ server, onBack }: Props) {
     setInfo(null);
     try {
       await invoke("create_backup", {
-        serverId:   server.id,
+        serverId: server.id,
         serverName: server.name,
-        serverDir:  `/tmp/cubed-dev/servers/${server.name}`,
+        serverDir: `/tmp/cubed-dev/servers/${server.name}`,
       });
       await refresh();
     } catch (e) {
@@ -133,16 +144,25 @@ export function Backups({ server, onBack }: Props) {
         <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed text-center text-muted-foreground p-12">
           <div>
             <p className="text-sm">No hay backups todavía.</p>
-            <p className="text-xs mt-1">Pulsa <strong>Crear backup</strong> para hacer el primero.</p>
+            <p className="text-xs mt-1">
+              Pulsa <strong>Crear backup</strong> para hacer el primero.
+            </p>
           </div>
         </div>
       ) : (
         <ul className="divide-y rounded-lg border bg-card">
           {backups.map((b) => (
-            <li key={b.id} className="flex items-center justify-between px-4 py-3 gap-4">
+            <li
+              key={b.id}
+              className="flex items-center justify-between px-4 py-3 gap-4"
+            >
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{b.path.split("/").pop()}</p>
-                <p className="text-xs text-muted-foreground">{fmt_date(b.created_at)} · {fmt_bytes(b.size_bytes)}</p>
+                <p className="text-sm font-medium truncate">
+                  {b.path.split("/").pop()}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {fmt_date(b.created_at)} · {fmt_bytes(b.size_bytes)}
+                </p>
               </div>
               <div className="flex gap-2 shrink-0">
                 <button

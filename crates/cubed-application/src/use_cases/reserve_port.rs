@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::error::{ApplicationError, ApplicationResult};
 use crate::ports::{PortManager, ServerRepository};
+use std::sync::Arc;
 
 pub struct ReservePort {
     port_mgr: Arc<dyn PortManager>,
@@ -16,9 +16,10 @@ impl ReservePort {
     pub async fn validate(&self, port: u16) -> ApplicationResult<()> {
         self.port_mgr.validate(port).await?;
         if self.repo.port_in_use(port).await? {
-            return Err(ApplicationError::Infrastructure(
-                format!("El puerto {} ya está asignado a otro servidor en Cubed", port),
-            ));
+            return Err(ApplicationError::Infrastructure(format!(
+                "El puerto {} ya está asignado a otro servidor en Cubed",
+                port
+            )));
         }
         Ok(())
     }

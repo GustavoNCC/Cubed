@@ -1,16 +1,16 @@
-use std::sync::Arc;
-use uuid::Uuid;
-use cubed_domain::entities::{Modpack, ModpackFormat};
 use crate::error::{ApplicationError, ApplicationResult};
 use crate::ports::{ModpackRepository, ServerRepository};
+use cubed_domain::entities::{Modpack, ModpackFormat};
+use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct ImportModpackInput {
-    pub server_id:   Uuid,
+    pub server_id: Uuid,
     pub source_path: String,
 }
 
 pub struct ImportModpack {
-    servers:  Arc<dyn ServerRepository>,
+    servers: Arc<dyn ServerRepository>,
     modpacks: Arc<dyn ModpackRepository>,
 }
 
@@ -24,9 +24,12 @@ impl ImportModpack {
         self.servers
             .find_by_id(input.server_id)
             .await?
-            .ok_or_else(|| ApplicationError::Infrastructure(
-                format!("Servidor {} no encontrado", input.server_id),
-            ))?;
+            .ok_or_else(|| {
+                ApplicationError::Infrastructure(format!(
+                    "Servidor {} no encontrado",
+                    input.server_id
+                ))
+            })?;
 
         let format = detect_format(&input.source_path)?;
         let name = std::path::Path::new(&input.source_path)
@@ -42,50 +45,80 @@ impl ImportModpack {
 }
 
 fn detect_format(path: &str) -> ApplicationResult<ModpackFormat> {
-    if path.ends_with(".mrpack") { return Ok(ModpackFormat::Mrpack); }
-    if path.ends_with(".zip")    { return Ok(ModpackFormat::Zip); }
-    Err(ApplicationError::Infrastructure(
-        format!("Formato no soportado: '{}'. Use .mrpack o .zip", path),
-    ))
+    if path.ends_with(".mrpack") {
+        return Ok(ModpackFormat::Mrpack);
+    }
+    if path.ends_with(".zip") {
+        return Ok(ModpackFormat::Zip);
+    }
+    Err(ApplicationError::Infrastructure(format!(
+        "Formato no soportado: '{}'. Use .mrpack o .zip",
+        path
+    )))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
-    use std::sync::Mutex;
+    use crate::ports::ServerRepository;
     use async_trait::async_trait;
     use cubed_domain::entities::{Server, ServerSoftware};
     use cubed_domain::value_objects::{JavaPath, ServerName, ServerPort, ServerVersion};
-    use crate::ports::ServerRepository;
+    use std::collections::HashMap;
+    use std::sync::Mutex;
 
     struct FakeSrvRepo(Server);
     #[async_trait]
     impl ServerRepository for FakeSrvRepo {
-        async fn save(&self, _: &Server) -> ApplicationResult<()> { Ok(()) }
-        async fn find_by_id(&self, id: Uuid) -> ApplicationResult<Option<Server>> {
-            if id == self.0.id() { Ok(Some(self.0.clone())) } else { Ok(None) }
+        async fn save(&self, _: &Server) -> ApplicationResult<()> {
+            Ok(())
         }
-        async fn find_all(&self) -> ApplicationResult<Vec<Server>> { Ok(vec![self.0.clone()]) }
-        async fn delete(&self, _: Uuid) -> ApplicationResult<()> { Ok(()) }
-        async fn port_in_use(&self, _: u16) -> ApplicationResult<bool> { Ok(false) }
+        async fn find_by_id(&self, id: Uuid) -> ApplicationResult<Option<Server>> {
+            if id == self.0.id() {
+                Ok(Some(self.0.clone()))
+            } else {
+                Ok(None)
+            }
+        }
+        async fn find_all(&self) -> ApplicationResult<Vec<Server>> {
+            Ok(vec![self.0.clone()])
+        }
+        async fn delete(&self, _: Uuid) -> ApplicationResult<()> {
+            Ok(())
+        }
+        async fn port_in_use(&self, _: u16) -> ApplicationResult<bool> {
+            Ok(false)
+        }
     }
 
     struct FakePackRepo(Mutex<HashMap<Uuid, Modpack>>);
-    impl FakePackRepo { fn new() -> Arc<Self> { Arc::new(Self(Mutex::new(HashMap::new()))) } }
+    impl FakePackRepo {
+        fn new() -> Arc<Self> {
+            Arc::new(Self(Mutex::new(HashMap::new())))
+        }
+    }
     #[async_trait]
     impl ModpackRepository for FakePackRepo {
         async fn save(&self, m: &Modpack) -> ApplicationResult<()> {
-            self.0.lock().unwrap().insert(m.id(), m.clone()); Ok(())
+            self.0.lock().unwrap().insert(m.id(), m.clone());
+            Ok(())
         }
         async fn find_by_id(&self, id: Uuid) -> ApplicationResult<Option<Modpack>> {
             Ok(self.0.lock().unwrap().get(&id).cloned())
         }
         async fn find_by_server(&self, sid: Uuid) -> ApplicationResult<Vec<Modpack>> {
-            Ok(self.0.lock().unwrap().values().filter(|m| m.server_id() == sid).cloned().collect())
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|m| m.server_id() == sid)
+                .cloned()
+                .collect())
         }
         async fn delete(&self, id: Uuid) -> ApplicationResult<()> {
-            self.0.lock().unwrap().remove(&id); Ok(())
+            self.0.lock().unwrap().remove(&id);
+            Ok(())
         }
     }
 
@@ -104,10 +137,13 @@ mod tests {
         let srv = make_server();
         let sid = srv.id();
         let uc = ImportModpack::new(Arc::new(FakeSrvRepo(srv)), FakePackRepo::new());
-        let mp = uc.execute(ImportModpackInput {
-            server_id: sid,
-            source_path: "/packs/fabric-1.21.mrpack".into(),
-        }).await.unwrap();
+        let mp = uc
+            .execute(ImportModpackInput {
+                server_id: sid,
+                source_path: "/packs/fabric-1.21.mrpack".into(),
+            })
+            .await
+            .unwrap();
         assert_eq!(mp.format(), &ModpackFormat::Mrpack);
     }
 
@@ -116,10 +152,13 @@ mod tests {
         let srv = make_server();
         let sid = srv.id();
         let uc = ImportModpack::new(Arc::new(FakeSrvRepo(srv)), FakePackRepo::new());
-        let mp = uc.execute(ImportModpackInput {
-            server_id: sid,
-            source_path: "/packs/pack.zip".into(),
-        }).await.unwrap();
+        let mp = uc
+            .execute(ImportModpackInput {
+                server_id: sid,
+                source_path: "/packs/pack.zip".into(),
+            })
+            .await
+            .unwrap();
         assert_eq!(mp.format(), &ModpackFormat::Zip);
     }
 
@@ -128,10 +167,12 @@ mod tests {
         let srv = make_server();
         let sid = srv.id();
         let uc = ImportModpack::new(Arc::new(FakeSrvRepo(srv)), FakePackRepo::new());
-        let result = uc.execute(ImportModpackInput {
-            server_id: sid,
-            source_path: "/packs/pack.tar.gz".into(),
-        }).await;
+        let result = uc
+            .execute(ImportModpackInput {
+                server_id: sid,
+                source_path: "/packs/pack.tar.gz".into(),
+            })
+            .await;
         assert!(result.is_err());
     }
 }

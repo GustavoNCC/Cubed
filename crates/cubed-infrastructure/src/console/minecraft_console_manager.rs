@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{ChildStdin, ChildStdout, ChildStderr};
+use tokio::process::{ChildStderr, ChildStdin, ChildStdout};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use cubed_application::error::{ApplicationError, ApplicationResult};
-use cubed_application::ports::{ConsoleLine, ConsoleCallback, ConsoleManager};
+use cubed_application::ports::{ConsoleCallback, ConsoleLine, ConsoleManager};
 
 const BUFFER_LINES: usize = 500;
 
@@ -25,7 +25,9 @@ pub struct MinecraftConsoleManager {
 
 impl MinecraftConsoleManager {
     pub fn new() -> Self {
-        Self { state: Arc::new(Mutex::new(HashMap::new())) }
+        Self {
+            state: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     fn ensure_slot(map: &mut HashMap<Uuid, ConsoleState>, server_id: Uuid) {
@@ -45,12 +47,7 @@ impl MinecraftConsoleManager {
 
     /// Lanza lectores de stdout y stderr. Cada línea se entrega a todos
     /// los callbacks suscritos y se almacena en el buffer circular.
-    pub async fn spawn_readers(
-        &self,
-        server_id: Uuid,
-        stdout: ChildStdout,
-        stderr: ChildStderr,
-    ) {
+    pub async fn spawn_readers(&self, server_id: Uuid, stdout: ChildStdout, stderr: ChildStderr) {
         let state_out = self.state.clone();
         let state_err = self.state.clone();
 
@@ -58,7 +55,11 @@ impl MinecraftConsoleManager {
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                let entry = ConsoleLine { server_id, is_stdout: true, text: line };
+                let entry = ConsoleLine {
+                    server_id,
+                    is_stdout: true,
+                    text: line,
+                };
                 let mut map = state_out.lock().await;
                 if let Some(cs) = map.get_mut(&server_id) {
                     // deliver to all subscribers
@@ -78,7 +79,11 @@ impl MinecraftConsoleManager {
         tokio::spawn(async move {
             let mut reader = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                let entry = ConsoleLine { server_id, is_stdout: false, text: line };
+                let entry = ConsoleLine {
+                    server_id,
+                    is_stdout: false,
+                    text: line,
+                };
                 let mut map = state_err.lock().await;
                 if let Some(cs) = map.get_mut(&server_id) {
                     for cb in &cs.callbacks {
@@ -104,18 +109,16 @@ impl MinecraftConsoleManager {
 }
 
 impl Default for MinecraftConsoleManager {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
 impl ConsoleManager for MinecraftConsoleManager {
     /// Suscribe un callback a líneas en tiempo real. También reproduce el buffer
     /// histórico inmediatamente para que el suscriptor no pierda el pasado.
-    async fn attach(
-        &self,
-        server_id: Uuid,
-        callback: ConsoleCallback,
-    ) -> ApplicationResult<()> {
+    async fn attach(&self, server_id: Uuid, callback: ConsoleCallback) -> ApplicationResult<()> {
         let mut map = self.state.lock().await;
         Self::ensure_slot(&mut map, server_id);
         let cs = map.get_mut(&server_id).unwrap();
@@ -131,20 +134,24 @@ impl ConsoleManager for MinecraftConsoleManager {
     async fn send_command(&self, server_id: Uuid, command: &str) -> ApplicationResult<()> {
         let mut map = self.state.lock().await;
         let cs = map.get_mut(&server_id).ok_or_else(|| {
-            ApplicationError::Infrastructure(
-                format!("No hay consola activa para el servidor {}", server_id),
-            )
+            ApplicationError::Infrastructure(format!(
+                "No hay consola activa para el servidor {}",
+                server_id
+            ))
         })?;
 
-        let stdin = cs.stdin.as_mut().ok_or_else(|| {
-            ApplicationError::Infrastructure("stdin no disponible".into())
-        })?;
+        let stdin = cs
+            .stdin
+            .as_mut()
+            .ok_or_else(|| ApplicationError::Infrastructure("stdin no disponible".into()))?;
 
         let line = format!("{}\n", command);
-        stdin.write_all(line.as_bytes())
+        stdin
+            .write_all(line.as_bytes())
             .await
             .map_err(|e| ApplicationError::Infrastructure(e.to_string()))?;
-        stdin.flush()
+        stdin
+            .flush()
             .await
             .map_err(|e| ApplicationError::Infrastructure(e.to_string()))?;
         Ok(())
@@ -154,7 +161,17 @@ impl ConsoleManager for MinecraftConsoleManager {
         match self.state.try_lock() {
             Ok(map) => map
                 .get(&server_id)
-                .map(|cs| cs.buffer.iter().rev().take(n).cloned().collect::<Vec<_>>().into_iter().rev().collect())
+                .map(|cs| {
+                    cs.buffer
+                        .iter()
+                        .rev()
+                        .take(n)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                        .collect()
+                })
                 .unwrap_or_default(),
             Err(_) => vec![],
         }
@@ -204,7 +221,10 @@ mod tests {
 
         let tail = mgr.tail(id, BUFFER_LINES + 100);
         assert_eq!(tail.len(), BUFFER_LINES);
-        assert_eq!(tail.last().unwrap().text, format!("line {}", BUFFER_LINES + 9));
+        assert_eq!(
+            tail.last().unwrap().text,
+            format!("line {}", BUFFER_LINES + 9)
+        );
     }
 
     #[tokio::test]
@@ -221,15 +241,24 @@ mod tests {
                 callbacks: Vec::new(),
             });
             for i in 0..3 {
-                cs.buffer.push_back(ConsoleLine { server_id: id, is_stdout: true, text: format!("msg {}", i) });
+                cs.buffer.push_back(ConsoleLine {
+                    server_id: id,
+                    is_stdout: true,
+                    text: format!("msg {}", i),
+                });
             }
         }
 
         let counter = Arc::new(AtomicUsize::new(0));
         let c = counter.clone();
-        mgr.attach(id, Box::new(move |_| { c.fetch_add(1, Ordering::SeqCst); }))
-            .await
-            .unwrap();
+        mgr.attach(
+            id,
+            Box::new(move |_| {
+                c.fetch_add(1, Ordering::SeqCst);
+            }),
+        )
+        .await
+        .unwrap();
 
         // 3 replayed lines
         assert_eq!(counter.load(Ordering::SeqCst), 3);
@@ -238,8 +267,14 @@ mod tests {
         {
             let mut map = mgr.state.lock().await;
             if let Some(cs) = map.get_mut(&id) {
-                let entry = ConsoleLine { server_id: id, is_stdout: true, text: "new".into() };
-                for cb in &cs.callbacks { cb(entry.clone()); }
+                let entry = ConsoleLine {
+                    server_id: id,
+                    is_stdout: true,
+                    text: "new".into(),
+                };
+                for cb in &cs.callbacks {
+                    cb(entry.clone());
+                }
             }
         }
 

@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use async_trait::async_trait;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -14,13 +14,17 @@ pub struct InMemoryModRepo {
 
 impl InMemoryModRepo {
     pub fn new() -> Arc<Self> {
-        Arc::new(Self { store: Arc::new(RwLock::new(HashMap::new())) })
+        Arc::new(Self {
+            store: Arc::new(RwLock::new(HashMap::new())),
+        })
     }
 }
 
 impl Default for InMemoryModRepo {
     fn default() -> Self {
-        Self { store: Arc::new(RwLock::new(HashMap::new())) }
+        Self {
+            store: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 }
 
@@ -36,7 +40,10 @@ impl ModRepository for InMemoryModRepo {
     }
 
     async fn find_by_server(&self, server_id: Uuid) -> ApplicationResult<Vec<ModEntry>> {
-        Ok(self.store.read().await
+        Ok(self
+            .store
+            .read()
+            .await
             .values()
             .filter(|e| e.server_id() == server_id)
             .cloned()

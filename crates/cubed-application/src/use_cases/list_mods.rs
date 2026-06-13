@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use uuid::Uuid;
-use cubed_domain::entities::ModEntry;
 use crate::error::ApplicationResult;
 use crate::ports::ModRepository;
+use cubed_domain::entities::ModEntry;
+use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct ListMods {
     mods: Arc<dyn ModRepository>,

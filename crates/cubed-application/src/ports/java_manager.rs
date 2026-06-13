@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::error::ApplicationResult;
+use async_trait::async_trait;
 
 /// Información sobre una instalación de Java encontrada en el sistema.
 #[derive(Debug, Clone, PartialEq, Eq)]

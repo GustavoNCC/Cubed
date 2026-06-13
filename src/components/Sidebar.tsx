@@ -5,9 +5,9 @@ import { CubedLogo } from "./CubedLogo";
 type Page = "dashboard" | "servers" | "settings";
 
 const NAV = [
-  { id: "dashboard" as Page, label: "Dashboard",     Icon: LayoutDashboard },
-  { id: "servers"   as Page, label: "Servidores",    Icon: Server           },
-  { id: "settings"  as Page, label: "Configuración", Icon: Settings         },
+  { id: "dashboard" as Page, label: "Dashboard", Icon: LayoutDashboard },
+  { id: "servers" as Page, label: "Servidores", Icon: Server },
+  { id: "settings" as Page, label: "Configuración", Icon: Settings },
 ];
 
 interface Props {
@@ -27,8 +27,12 @@ export function Sidebar({ current, onChange }: Props) {
           <CubedLogo size={34} />
         </div>
         <div className="flex flex-col leading-none">
-          <span className="font-bold tracking-wider text-sm text-foreground">CUBED</span>
-          <span className="text-[10px] text-muted-foreground font-mono tracking-widest">SERVER MGR</span>
+          <span className="font-bold tracking-wider text-sm text-foreground">
+            CUBED
+          </span>
+          <span className="text-[10px] text-muted-foreground font-mono tracking-widest">
+            SERVER MGR
+          </span>
         </div>
       </div>
 
@@ -42,17 +46,19 @@ export function Sidebar({ current, onChange }: Props) {
               "group relative flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-150 w-full text-left",
               current === id
                 ? "bg-primary/10 text-primary border border-primary/30 neon-border"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent",
             )}
           >
             {/* Active indicator bar */}
             {current === id && (
               <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary" />
             )}
-            <Icon className={cn(
-              "h-4 w-4 shrink-0 transition-colors",
-              current === id ? "text-primary" : "group-hover:text-primary/70"
-            )} />
+            <Icon
+              className={cn(
+                "h-4 w-4 shrink-0 transition-colors",
+                current === id ? "text-primary" : "group-hover:text-primary/70",
+              )}
+            />
             {label}
           </button>
         ))}

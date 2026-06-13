@@ -32,14 +32,30 @@ impl Backup {
         size_bytes: u64,
         created_at: DateTime<Utc>,
     ) -> Self {
-        Self { id, server_id, path, size_bytes, created_at }
+        Self {
+            id,
+            server_id,
+            path,
+            size_bytes,
+            created_at,
+        }
     }
 
-    pub fn id(&self) -> Uuid { self.id }
-    pub fn server_id(&self) -> Uuid { self.server_id }
-    pub fn path(&self) -> &str { &self.path }
-    pub fn size_bytes(&self) -> u64 { self.size_bytes }
-    pub fn created_at(&self) -> DateTime<Utc> { self.created_at }
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+    pub fn server_id(&self) -> Uuid {
+        self.server_id
+    }
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+    pub fn size_bytes(&self) -> u64 {
+        self.size_bytes
+    }
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
 }
 
 #[cfg(test)]

@@ -5,27 +5,40 @@ import type { SettingsDto } from "../types";
 
 const INTERVAL_OPTIONS: { label: string; value: number }[] = [
   { label: "Desactivado", value: 0 },
-  { label: "30 minutos",  value: 1_800 },
-  { label: "1 hora",      value: 3_600 },
-  { label: "3 horas",     value: 10_800 },
-  { label: "5 horas",     value: 18_000 },
-  { label: "12 horas",    value: 43_200 },
-  { label: "24 horas",    value: 86_400 },
+  { label: "30 minutos", value: 1_800 },
+  { label: "1 hora", value: 3_600 },
+  { label: "3 horas", value: 10_800 },
+  { label: "5 horas", value: 18_000 },
+  { label: "12 horas", value: 43_200 },
+  { label: "24 horas", value: 86_400 },
 ];
 
 export function Settings() {
-  const [form, setForm]       = useState<SettingsDto | null>(null);
-  const [saving, setSaving]   = useState(false);
+  const [form, setForm] = useState<SettingsDto | null>(null);
+  const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getSettings().then(setForm).catch((e) => setError(String(e)));
+    api
+      .getSettings()
+      .then(setForm)
+      .catch((e) => setError(String(e)));
   }, []);
 
   function field(key: keyof SettingsDto) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm((prev) => prev ? { ...prev, [key]: key === "backup_interval_secs" ? Number(e.target.value) : e.target.value } : prev);
+      setForm((prev) =>
+        prev
+          ? {
+              ...prev,
+              [key]:
+                key === "backup_interval_secs"
+                  ? Number(e.target.value)
+                  : e.target.value,
+            }
+          : prev,
+      );
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -111,7 +124,9 @@ export function Settings() {
             className="rounded border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             {INTERVAL_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
             ))}
           </select>
         </div>
@@ -125,7 +140,8 @@ export function Settings() {
       {/* Feedback */}
       {success && (
         <div className="flex items-center gap-2 rounded-md border border-green-500/50 bg-green-500/10 px-4 py-2 text-sm text-green-700 dark:text-green-400">
-          <CheckCircle className="h-4 w-4 shrink-0" /> Configuración guardada correctamente.
+          <CheckCircle className="h-4 w-4 shrink-0" /> Configuración guardada
+          correctamente.
         </div>
       )}
       {error && (
@@ -140,7 +156,11 @@ export function Settings() {
           disabled={saving}
           className="flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
-          {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {saving ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4" />
+          )}
           {saving ? "Guardando…" : "Guardar cambios"}
         </button>
       </div>
@@ -148,17 +168,28 @@ export function Settings() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-2">
-      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{title}</h2>
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+        {title}
+      </h2>
       <div className="divide-y rounded-md border bg-card">{children}</div>
     </div>
   );
 }
 
 function Field({
-  label, value, onChange, placeholder,
+  label,
+  value,
+  onChange,
+  placeholder,
 }: {
   label: string;
   value: string;

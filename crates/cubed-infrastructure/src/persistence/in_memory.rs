@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use async_trait::async_trait;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -15,13 +15,17 @@ pub struct InMemoryServerRepo {
 
 impl InMemoryServerRepo {
     pub fn new() -> Arc<Self> {
-        Arc::new(Self { store: Arc::new(RwLock::new(HashMap::new())) })
+        Arc::new(Self {
+            store: Arc::new(RwLock::new(HashMap::new())),
+        })
     }
 }
 
 impl Default for InMemoryServerRepo {
     fn default() -> Self {
-        Self { store: Arc::new(RwLock::new(HashMap::new())) }
+        Self {
+            store: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 }
 
@@ -46,6 +50,11 @@ impl ServerRepository for InMemoryServerRepo {
     }
 
     async fn port_in_use(&self, port: u16) -> ApplicationResult<bool> {
-        Ok(self.store.read().await.values().any(|s| s.port().value() == port))
+        Ok(self
+            .store
+            .read()
+            .await
+            .values()
+            .any(|s| s.port().value() == port))
     }
 }

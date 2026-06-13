@@ -1,6 +1,6 @@
+use cubed_application::CubedEvent;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
-use cubed_application::CubedEvent;
 
 /// Bus de eventos que traduce CubedEvent → evento Tauri global.
 #[derive(Clone)]

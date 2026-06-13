@@ -6,14 +6,7 @@ use cubed_application::error::{ApplicationError, ApplicationResult};
 use cubed_application::ports::FileSystemManager;
 
 /// Directorios globales de Cubed bajo la raíz configurada.
-const GLOBAL_DIRS: &[&str] = &[
-    "servers",
-    "backups",
-    "downloads",
-    "temp",
-    "config",
-    "logs",
-];
+const GLOBAL_DIRS: &[&str] = &["servers", "backups", "downloads", "temp", "config", "logs"];
 
 /// Subdirectorios que se crean dentro de cada servidor.
 const SERVER_SUBDIRS: &[&str] = &["mods", "world", "config", "logs"];
@@ -26,7 +19,9 @@ pub struct LocalFileSystem {
 
 impl LocalFileSystem {
     pub fn new(cubed_root: impl Into<String>) -> Self {
-        Self { cubed_root: cubed_root.into() }
+        Self {
+            cubed_root: cubed_root.into(),
+        }
     }
 }
 
@@ -40,7 +35,11 @@ impl FileSystemManager for LocalFileSystem {
         Ok(())
     }
 
-    async fn init_server_dirs(&self, servers_dir: &str, server_name: &str) -> ApplicationResult<()> {
+    async fn init_server_dirs(
+        &self,
+        servers_dir: &str,
+        server_name: &str,
+    ) -> ApplicationResult<()> {
         let base = format!("{}/{}", servers_dir, server_name);
         create_dir_all(&base).await?;
         for sub in SERVER_SUBDIRS {
@@ -49,14 +48,19 @@ impl FileSystemManager for LocalFileSystem {
         Ok(())
     }
 
-    async fn delete_server_dir(&self, servers_dir: &str, server_name: &str) -> ApplicationResult<()> {
+    async fn delete_server_dir(
+        &self,
+        servers_dir: &str,
+        server_name: &str,
+    ) -> ApplicationResult<()> {
         let path = format!("{}/{}", servers_dir, server_name);
         if Path::new(&path).exists() {
-            fs::remove_dir_all(&path)
-                .await
-                .map_err(|e| ApplicationError::Infrastructure(
-                    format!("No se pudo eliminar el directorio '{}': {}", path, e),
-                ))?;
+            fs::remove_dir_all(&path).await.map_err(|e| {
+                ApplicationError::Infrastructure(format!(
+                    "No se pudo eliminar el directorio '{}': {}",
+                    path, e
+                ))
+            })?;
         }
         Ok(())
     }
@@ -66,27 +70,27 @@ impl FileSystemManager for LocalFileSystem {
     }
 
     async fn ensure_writable(&self, path: &str) -> ApplicationResult<()> {
-        let meta = fs::metadata(path)
-            .await
-            .map_err(|e| ApplicationError::Infrastructure(
-                format!("No se puede acceder a '{}': {}", path, e),
-            ))?;
+        let meta = fs::metadata(path).await.map_err(|e| {
+            ApplicationError::Infrastructure(format!("No se puede acceder a '{}': {}", path, e))
+        })?;
 
         if meta.permissions().readonly() {
-            return Err(ApplicationError::Infrastructure(
-                format!("El directorio '{}' no tiene permisos de escritura", path),
-            ));
+            return Err(ApplicationError::Infrastructure(format!(
+                "El directorio '{}' no tiene permisos de escritura",
+                path
+            )));
         }
         Ok(())
     }
 }
 
 async fn create_dir_all(path: &str) -> ApplicationResult<()> {
-    fs::create_dir_all(path)
-        .await
-        .map_err(|e| ApplicationError::Infrastructure(
-            format!("No se pudo crear el directorio '{}': {}", path, e),
+    fs::create_dir_all(path).await.map_err(|e| {
+        ApplicationError::Infrastructure(format!(
+            "No se pudo crear el directorio '{}': {}",
+            path, e
         ))
+    })
 }
 
 #[cfg(test)]
@@ -115,10 +119,16 @@ mod tests {
         let servers_dir = tmp.path().join("servers");
         tokio::fs::create_dir_all(&servers_dir).await.unwrap();
 
-        fs.init_server_dirs(servers_dir.to_str().unwrap(), "survival").await.unwrap();
+        fs.init_server_dirs(servers_dir.to_str().unwrap(), "survival")
+            .await
+            .unwrap();
 
         for sub in SERVER_SUBDIRS {
-            assert!(servers_dir.join("survival").join(sub).exists(), "falta subdir: {}", sub);
+            assert!(
+                servers_dir.join("survival").join(sub).exists(),
+                "falta subdir: {}",
+                sub
+            );
         }
     }
 
@@ -129,7 +139,9 @@ mod tests {
         let srv_dir = servers_dir.join("survival");
         tokio::fs::create_dir_all(&srv_dir).await.unwrap();
 
-        fs.delete_server_dir(servers_dir.to_str().unwrap(), "survival").await.unwrap();
+        fs.delete_server_dir(servers_dir.to_str().unwrap(), "survival")
+            .await
+            .unwrap();
 
         assert!(!srv_dir.exists());
     }
@@ -141,7 +153,9 @@ mod tests {
         tokio::fs::create_dir_all(&servers_dir).await.unwrap();
 
         // No debe fallar si el directorio no existe
-        let result = fs.delete_server_dir(servers_dir.to_str().unwrap(), "ghost").await;
+        let result = fs
+            .delete_server_dir(servers_dir.to_str().unwrap(), "ghost")
+            .await;
         assert!(result.is_ok());
     }
 

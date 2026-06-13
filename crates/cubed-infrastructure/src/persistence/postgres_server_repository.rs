@@ -2,9 +2,9 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use cubed_domain::entities::Server;
 use cubed_application::error::{ApplicationError, ApplicationResult};
 use cubed_application::ports::ServerRepository;
+use cubed_domain::entities::Server;
 
 use super::server_row::ServerRow;
 

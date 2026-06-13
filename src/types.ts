@@ -1,4 +1,9 @@
-export type ServerStatus = "offline" | "starting" | "running" | "stopping" | "crashed";
+export type ServerStatus =
+  | "offline"
+  | "starting"
+  | "running"
+  | "stopping"
+  | "crashed";
 
 export interface Server {
   id: string;
@@ -39,6 +44,12 @@ export interface TailscaleStatusDto {
   state: "not_installed" | "disconnected" | "connected";
   ip: string | null;
   hostname: string | null;
+}
+
+export interface JavaInstallationDto {
+  path: string;
+  major_version: number;
+  version_string: string;
 }
 
 export interface SettingsDto {

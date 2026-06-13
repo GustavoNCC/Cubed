@@ -6,5 +6,5 @@ pub mod server_row;
 
 pub use db::connect;
 pub use in_memory::InMemoryServerRepo;
-pub use json_server_repository::{JsonServerRepository, check_integrity};
+pub use json_server_repository::{check_integrity, JsonServerRepository};
 pub use postgres_server_repository::PostgresServerRepository;

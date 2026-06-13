@@ -5,9 +5,9 @@ use std::path::Path;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
-use cubed_domain::entities::ServerSoftware;
 use cubed_application::error::{ApplicationError, ApplicationResult};
 use cubed_application::ports::{DownloadedJar, Downloader};
+use cubed_domain::entities::ServerSoftware;
 
 use super::url_builder;
 
@@ -31,7 +31,9 @@ impl HttpDownloader {
 }
 
 impl Default for HttpDownloader {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
@@ -47,16 +49,11 @@ impl Downloader for HttpDownloader {
             .map_err(|e| ApplicationError::Infrastructure(e.to_string()))?;
 
         let url = url_builder::resolve_url(&self.client, software, minecraft_version).await?;
-        let dest_path = Path::new(dest_dir)
-            .join(Self::jar_name(software, minecraft_version));
+        let dest_path = Path::new(dest_dir).join(Self::jar_name(software, minecraft_version));
 
-        let resp = self.client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| ApplicationError::Infrastructure(
-                format!("Error de red al descargar {}: {}", url, e),
-            ))?;
+        let resp = self.client.get(&url).send().await.map_err(|e| {
+            ApplicationError::Infrastructure(format!("Error de red al descargar {}: {}", url, e))
+        })?;
 
         if !resp.status().is_success() {
             return Err(ApplicationError::Infrastructure(format!(
@@ -87,7 +84,11 @@ impl Downloader for HttpDownloader {
         })
     }
 
-    fn build_url(&self, software: &ServerSoftware, minecraft_version: &str) -> ApplicationResult<String> {
+    fn build_url(
+        &self,
+        software: &ServerSoftware,
+        minecraft_version: &str,
+    ) -> ApplicationResult<String> {
         url_builder::static_url(software, minecraft_version)
     }
 }
@@ -98,9 +99,18 @@ mod tests {
 
     #[test]
     fn jar_name_format() {
-        assert_eq!(HttpDownloader::jar_name(&ServerSoftware::Paper, "1.21.4"), "paper-1.21.4.jar");
-        assert_eq!(HttpDownloader::jar_name(&ServerSoftware::Purpur, "1.21.4"), "purpur-1.21.4.jar");
-        assert_eq!(HttpDownloader::jar_name(&ServerSoftware::Fabric, "1.21.4"), "fabric-1.21.4.jar");
+        assert_eq!(
+            HttpDownloader::jar_name(&ServerSoftware::Paper, "1.21.4"),
+            "paper-1.21.4.jar"
+        );
+        assert_eq!(
+            HttpDownloader::jar_name(&ServerSoftware::Purpur, "1.21.4"),
+            "purpur-1.21.4.jar"
+        );
+        assert_eq!(
+            HttpDownloader::jar_name(&ServerSoftware::Fabric, "1.21.4"),
+            "fabric-1.21.4.jar"
+        );
     }
 
     #[test]

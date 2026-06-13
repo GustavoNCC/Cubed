@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use uuid::Uuid;
 use crate::error::{ApplicationError, ApplicationResult};
 use crate::ports::ServerRepository;
+use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct StopServer {
     repo: Arc<dyn ServerRepository>,

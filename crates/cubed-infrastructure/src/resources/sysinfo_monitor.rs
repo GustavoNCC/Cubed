@@ -15,7 +15,9 @@ impl SysInfoResourceMonitor {
     pub fn new() -> Self {
         let mut sys = System::new_all();
         sys.refresh_all();
-        Self { sys: Mutex::new(sys) }
+        Self {
+            sys: Mutex::new(sys),
+        }
     }
 }
 
@@ -33,21 +35,21 @@ impl ResourceMonitor for SysInfoResourceMonitor {
         sys.refresh_memory();
 
         let cpu_percent = sys.global_cpu_usage();
-        let ram_used_bytes  = sys.used_memory();
+        let ram_used_bytes = sys.used_memory();
         let ram_total_bytes = sys.total_memory();
 
         let disks = Disks::new_with_refreshed_list();
-        let (disk_total_bytes, disk_used_bytes) = disks
-            .list()
-            .iter()
-            .fold((0u64, 0u64), |(total, used), d| {
-                (total + d.total_space(), used + (d.total_space() - d.available_space()))
+        let (disk_total_bytes, disk_used_bytes) =
+            disks.list().iter().fold((0u64, 0u64), |(total, used), d| {
+                (
+                    total + d.total_space(),
+                    used + (d.total_space() - d.available_space()),
+                )
             });
 
         let networks = Networks::new_with_refreshed_list();
-        let (net_rx_bytes, net_tx_bytes) = networks
-            .iter()
-            .fold((0u64, 0u64), |(rx, tx), (_, data)| {
+        let (net_rx_bytes, net_tx_bytes) =
+            networks.iter().fold((0u64, 0u64), |(rx, tx), (_, data)| {
                 (rx + data.total_received(), tx + data.total_transmitted())
             });
 
@@ -62,7 +64,11 @@ impl ResourceMonitor for SysInfoResourceMonitor {
         })
     }
 
-    async fn server_stats(&self, server_id: Uuid, pid: u32) -> ApplicationResult<Option<ServerStats>> {
+    async fn server_stats(
+        &self,
+        server_id: Uuid,
+        pid: u32,
+    ) -> ApplicationResult<Option<ServerStats>> {
         let mut sys = self.sys.lock().await;
         sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 

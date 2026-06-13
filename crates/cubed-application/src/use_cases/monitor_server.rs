@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use uuid::Uuid;
-use cubed_domain::entities::ServerStatus;
 use crate::error::ApplicationResult;
 use crate::ports::{ProcessManager, ServerRepository};
+use cubed_domain::entities::ServerStatus;
+use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct MonitorServer {
     repo: Arc<dyn ServerRepository>,
@@ -47,6 +47,10 @@ impl MonitorServer {
 
     /// Devuelve el estado actual sin modificar nada.
     pub async fn status(&self, server_id: Uuid) -> ApplicationResult<Option<ServerStatus>> {
-        Ok(self.repo.find_by_id(server_id).await?.map(|s| s.status().clone()))
+        Ok(self
+            .repo
+            .find_by_id(server_id)
+            .await?
+            .map(|s| s.status().clone()))
     }
 }

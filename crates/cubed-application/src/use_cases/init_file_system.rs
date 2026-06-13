@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::error::ApplicationResult;
 use crate::ports::FileSystemManager;
+use std::sync::Arc;
 
 pub struct InitFileSystem {
     fs: Arc<dyn FileSystemManager>,

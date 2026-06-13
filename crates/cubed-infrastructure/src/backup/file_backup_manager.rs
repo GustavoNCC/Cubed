@@ -9,17 +9,17 @@ use uuid::Uuid;
 
 use cubed_application::error::{ApplicationError, ApplicationResult};
 use cubed_application::ports::BackupRepository;
+use cubed_application::ports::ServerRepository;
 use cubed_application::use_cases::{CreateBackup, CreateBackupInput};
 use cubed_domain::entities::Backup;
-use cubed_application::ports::ServerRepository;
 
 /// Gestiona la creación y restauración de backups en disco (tar.gz).
 /// También puede iniciarse un scheduler automático cada N segundos.
 pub struct FileBackupManager {
     backups_dir: String,
-    servers:     Arc<dyn ServerRepository>,
-    repo:        Arc<dyn BackupRepository>,
-    scheduler:   Mutex<Option<JoinHandle<()>>>,
+    servers: Arc<dyn ServerRepository>,
+    repo: Arc<dyn BackupRepository>,
+    scheduler: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl FileBackupManager {
@@ -51,7 +51,10 @@ impl FileBackupManager {
 
         // Ensure backups dir exists
         fs::create_dir_all(&self.backups_dir).await.map_err(|e| {
-            ApplicationError::Infrastructure(format!("No se pudo crear directorio de backups: {}", e))
+            ApplicationError::Infrastructure(format!(
+                "No se pudo crear directorio de backups: {}",
+                e
+            ))
         })?;
 
         // tar -czf <dest> -C <parent> <server_name>
@@ -71,9 +74,10 @@ impl FileBackupManager {
             .map_err(|e| ApplicationError::Infrastructure(format!("tar falló: {}", e)))?;
 
         if !status.success() {
-            return Err(ApplicationError::Infrastructure(
-                format!("tar terminó con código {:?}", status.code()),
-            ));
+            return Err(ApplicationError::Infrastructure(format!(
+                "tar terminó con código {:?}",
+                status.code()
+            )));
         }
 
         let meta = fs::metadata(&dest).await.map_err(|e| {
@@ -96,15 +100,15 @@ impl FileBackupManager {
         backup_id: Uuid,
         restore_dir: &str,
     ) -> ApplicationResult<()> {
-        let backup = self.repo
-            .find_by_id(backup_id)
-            .await?
-            .ok_or_else(|| ApplicationError::Infrastructure(
-                format!("Backup {} no encontrado", backup_id),
-            ))?;
+        let backup = self.repo.find_by_id(backup_id).await?.ok_or_else(|| {
+            ApplicationError::Infrastructure(format!("Backup {} no encontrado", backup_id))
+        })?;
 
         fs::create_dir_all(restore_dir).await.map_err(|e| {
-            ApplicationError::Infrastructure(format!("No se pudo crear directorio de restauración: {}", e))
+            ApplicationError::Infrastructure(format!(
+                "No se pudo crear directorio de restauración: {}",
+                e
+            ))
         })?;
 
         let status = Command::new("tar")
@@ -115,9 +119,10 @@ impl FileBackupManager {
 
         if !status.success() {
             warn!(backup_id = %backup_id, "tar restore failed");
-            return Err(ApplicationError::Infrastructure(
-                format!("tar restore terminó con código {:?}", status.code()),
-            ));
+            return Err(ApplicationError::Infrastructure(format!(
+                "tar restore terminó con código {:?}",
+                status.code()
+            )));
         }
         info!(backup_id = %backup_id, restore_dir, "backup restored");
         Ok(())
@@ -166,9 +171,9 @@ impl FileBackupManager {
             return;
         }
 
-        let this    = self.clone();
-        let sdir    = servers_dir;
-        let handle  = tokio::spawn(async move {
+        let this = self.clone();
+        let sdir = servers_dir;
+        let handle = tokio::spawn(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(interval_secs)).await;
                 let servers = match this.servers.find_all().await {
@@ -180,7 +185,10 @@ impl FileBackupManager {
                 };
                 for srv in servers {
                     let server_dir = format!("{}/{}", sdir, srv.name());
-                    if let Err(e) = this.backup_server(srv.id(), srv.name().as_str(), &server_dir).await {
+                    if let Err(e) = this
+                        .backup_server(srv.id(), srv.name().as_str(), &server_dir)
+                        .await
+                    {
                         tracing::warn!(server_id = %srv.id(), "auto-backup failed: {}", e);
                     }
                 }
@@ -218,7 +226,9 @@ mod tests {
         let mgr = FileBackupManager::new("/tmp/cubed-test-backups", servers, repo);
 
         // Backup a non-existent source dir — tar should fail (unless /no/such exists)
-        let result = mgr.backup_server(sid, "test-server", "/no/such/directory").await;
+        let result = mgr
+            .backup_server(sid, "test-server", "/no/such/directory")
+            .await;
         assert!(result.is_err());
     }
 
@@ -228,7 +238,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let src = dir.path().to_str().unwrap();
         // Create a dummy file so tar has something
-        tokio::fs::write(format!("{}/world.dat", src), b"dummy").await.unwrap();
+        tokio::fs::write(format!("{}/world.dat", src), b"dummy")
+            .await
+            .unwrap();
 
         let server = make_server();
         let sid = server.id();

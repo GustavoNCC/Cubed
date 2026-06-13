@@ -54,31 +54,42 @@ impl MinecraftProcessManager {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| ApplicationError::Infrastructure(
-                format!("No se pudo iniciar el proceso Java: {}", e),
-            ))?;
+            .map_err(|e| {
+                ApplicationError::Infrastructure(format!(
+                    "No se pudo iniciar el proceso Java: {}",
+                    e
+                ))
+            })?;
 
         let pid = child.id().ok_or_else(|| {
             ApplicationError::Infrastructure("No se pudo obtener el PID del proceso".into())
         })?;
 
-        let stdin  = child.stdin.take().ok_or_else(|| {
-            ApplicationError::Infrastructure("No se pudo capturar stdin".into())
-        })?;
-        let stdout = child.stdout.take().ok_or_else(|| {
-            ApplicationError::Infrastructure("No se pudo capturar stdout".into())
-        })?;
-        let stderr = child.stderr.take().ok_or_else(|| {
-            ApplicationError::Infrastructure("No se pudo capturar stderr".into())
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| ApplicationError::Infrastructure("No se pudo capturar stdin".into()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| ApplicationError::Infrastructure("No se pudo capturar stdout".into()))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| ApplicationError::Infrastructure("No se pudo capturar stderr".into()))?;
 
-        self.processes.lock().await.insert(server_id, ManagedProcess { pid, child });
+        self.processes
+            .lock()
+            .await
+            .insert(server_id, ManagedProcess { pid, child });
         Ok((pid, stdin, stdout, stderr))
     }
 }
 
 impl Default for MinecraftProcessManager {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
@@ -102,15 +113,21 @@ impl ProcessManager for MinecraftProcessManager {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| ApplicationError::Infrastructure(
-                format!("No se pudo iniciar el proceso Java: {}", e),
-            ))?;
+            .map_err(|e| {
+                ApplicationError::Infrastructure(format!(
+                    "No se pudo iniciar el proceso Java: {}",
+                    e
+                ))
+            })?;
 
         let pid = child.id().ok_or_else(|| {
             ApplicationError::Infrastructure("No se pudo obtener el PID del proceso".into())
         })?;
 
-        self.processes.lock().await.insert(server_id, ManagedProcess { pid, child });
+        self.processes
+            .lock()
+            .await
+            .insert(server_id, ManagedProcess { pid, child });
 
         Ok(pid)
     }
@@ -118,9 +135,10 @@ impl ProcessManager for MinecraftProcessManager {
     async fn stop(&self, server_id: Uuid) -> ApplicationResult<()> {
         let mut procs = self.processes.lock().await;
         let proc = procs.get_mut(&server_id).ok_or_else(|| {
-            ApplicationError::Infrastructure(
-                format!("No hay proceso activo para el servidor {}", server_id),
-            )
+            ApplicationError::Infrastructure(format!(
+                "No hay proceso activo para el servidor {}",
+                server_id
+            ))
         })?;
 
         if let Some(stdin) = proc.child.stdin.as_mut() {
@@ -165,7 +183,10 @@ impl ProcessManager for MinecraftProcessManager {
         match self.processes.try_lock() {
             Ok(procs) => procs
                 .iter()
-                .map(|(id, p)| ProcessInfo { server_id: *id, pid: p.pid })
+                .map(|(id, p)| ProcessInfo {
+                    server_id: *id,
+                    pid: p.pid,
+                })
                 .collect(),
             Err(_) => vec![],
         }
@@ -215,7 +236,10 @@ mod tests {
             .unwrap();
 
         let pid = child.id().unwrap();
-        mgr.processes.lock().await.insert(id, ManagedProcess { pid, child });
+        mgr.processes
+            .lock()
+            .await
+            .insert(id, ManagedProcess { pid, child });
 
         // Espera a que termine
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -244,7 +268,10 @@ mod tests {
             .unwrap();
 
         let pid = child.id().unwrap();
-        mgr.processes.lock().await.insert(id, ManagedProcess { pid, child });
+        mgr.processes
+            .lock()
+            .await
+            .insert(id, ManagedProcess { pid, child });
 
         assert!(mgr.is_alive(id).await.unwrap());
         mgr.kill(id).await.unwrap();

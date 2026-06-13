@@ -1,5 +1,13 @@
-import { useEffect, useState } from "react";
-import { ChevronLeft, Layers, Trash2, Upload, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ChevronLeft,
+  Layers,
+  Trash2,
+  Upload,
+  CheckCircle,
+  XCircle,
+  Loader2,
+} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -33,22 +41,26 @@ interface Props {
 }
 
 export function Modpacks({ server, onBack }: Props) {
-  const [modpacks, setModpacks]     = useState<ModpackDto[]>([]);
-  const [error, setError]           = useState<string | null>(null);
+  const [modpacks, setModpacks] = useState<ModpackDto[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
-  const [progress, setProgress]     = useState<ProgressEvent | null>(null);
-  const [summary, setSummary]       = useState<InstallSummaryDto | null>(null);
+  const [progress, setProgress] = useState<ProgressEvent | null>(null);
+  const [summary, setSummary] = useState<InstallSummaryDto | null>(null);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
-      const list = await invoke<ModpackDto[]>("list_modpacks", { serverId: server.id });
+      const list = await invoke<ModpackDto[]>("list_modpacks", {
+        serverId: server.id,
+      });
       setModpacks(list);
     } catch (e) {
       setError(String(e));
     }
-  }
+  }, [server.id]);
 
-  useEffect(() => { refresh(); }, [server.id]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   async function handleInstallClick() {
     setError(null);
@@ -57,9 +69,7 @@ export function Modpacks({ server, onBack }: Props) {
     // Native file picker — no prompt(), no manual paths
     const selected = await open({
       title: "Seleccionar modpack",
-      filters: [
-        { name: "Modpack", extensions: ["mrpack", "zip"] },
-      ],
+      filters: [{ name: "Modpack", extensions: ["mrpack", "zip"] }],
       multiple: false,
       directory: false,
     });
@@ -104,9 +114,10 @@ export function Modpacks({ server, onBack }: Props) {
     }
   }
 
-  const progressPct = progress && progress.total > 0
-    ? Math.round((progress.done / progress.total) * 100)
-    : null;
+  const progressPct =
+    progress && progress.total > 0
+      ? Math.round((progress.done / progress.total) * 100)
+      : null;
 
   return (
     <div className="flex flex-col gap-4 h-full">
@@ -129,9 +140,11 @@ export function Modpacks({ server, onBack }: Props) {
           disabled={installing}
           className="flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
-          {installing
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            : <Upload className="h-3.5 w-3.5" />}
+          {installing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Upload className="h-3.5 w-3.5" />
+          )}
           {installing ? "Instalando…" : "Instalar modpack"}
         </button>
       </div>
@@ -141,10 +154,14 @@ export function Modpacks({ server, onBack }: Props) {
         <div className="rounded-lg border bg-card p-4 flex flex-col gap-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground truncate max-w-xs">
-              {progress ? `Descargando: ${progress.file}` : "Preparando archivos…"}
+              {progress
+                ? `Descargando: ${progress.file}`
+                : "Preparando archivos…"}
             </span>
             {progressPct !== null && (
-              <span className="text-xs font-mono tabular-nums">{progressPct}%</span>
+              <span className="text-xs font-mono tabular-nums">
+                {progressPct}%
+              </span>
             )}
           </div>
           <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -186,13 +203,19 @@ export function Modpacks({ server, onBack }: Props) {
         <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed text-center text-muted-foreground p-12">
           <div>
             <p className="text-sm">No hay modpacks instalados.</p>
-            <p className="text-xs mt-1">Soporta <strong>.mrpack</strong> (Modrinth) y <strong>.zip</strong> (CurseForge).</p>
+            <p className="text-xs mt-1">
+              Soporta <strong>.mrpack</strong> (Modrinth) y{" "}
+              <strong>.zip</strong> (CurseForge).
+            </p>
           </div>
         </div>
       ) : (
         <ul className="divide-y rounded-lg border bg-card">
           {modpacks.map((m) => (
-            <li key={m.id} className="flex items-center justify-between px-4 py-3 gap-4">
+            <li
+              key={m.id}
+              className="flex items-center justify-between px-4 py-3 gap-4"
+            >
               <div className="flex items-center gap-2 min-w-0">
                 <Layers className="h-4 w-4 text-primary shrink-0" />
                 <div className="min-w-0">
