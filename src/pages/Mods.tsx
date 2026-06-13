@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, Package, Trash2, Upload, CheckCircle, XCircle } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { Server } from "../types";
 
 interface ModDto {
@@ -20,7 +21,6 @@ export function Mods({ server, onBack }: Props) {
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError]     = useState<string | null>(null);
   const [info, setInfo]       = useState<string | null>(null);
-  const fileInputRef          = useRef<HTMLInputElement>(null);
 
   async function refresh() {
     try {
@@ -31,33 +31,39 @@ export function Mods({ server, onBack }: Props) {
 
   useEffect(() => { refresh(); }, [server.id]);
 
-  function handleInstall() {
+  async function handleInstall() {
     setError(null);
     setInfo(null);
-    fileInputRef.current?.click();
-  }
 
-  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // In Tauri the file object has a real path via the webkitRelativePath or
-    // we use a path prompt as fallback — ask the user for the absolute path.
-    const sourcePath = (file as unknown as { path?: string }).path ?? prompt(
-      `Introduce la ruta absoluta al archivo:\n${file.name}`
-    );
-    e.target.value = ""; // reset input
+    // Native file picker — no prompt(), no manual paths
+    const selected = await open({
+      title: "Seleccionar mod (.jar)",
+      filters: [{ name: "Mod JAR", extensions: ["jar"] }],
+      multiple: false,
+      directory: false,
+    });
+
+    if (!selected) return; // user cancelled
+
+    const sourcePath = typeof selected === "string" ? selected : selected[0];
     if (!sourcePath) return;
 
     setWorking("install");
     try {
       const valid = await invoke<boolean>("validate_jar", { path: sourcePath });
-      if (!valid) { setError("El archivo no es un JAR válido (cabecera inválida)."); return; }
-
+      if (!valid) {
+        setError("El archivo no es un JAR válido.");
+        return;
+      }
       const modsDir = `/tmp/cubed-dev/servers/${server.name}/mods`;
       await invoke("install_mod", { serverId: server.id, sourcePath, modsDir });
       await refresh();
       setInfo("Mod instalado correctamente.");
-    } catch (err) { setError(String(err)); } finally { setWorking(null); }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setWorking(null);
+    }
   }
 
   async function handleRemove(id: string) {
@@ -66,18 +72,15 @@ export function Mods({ server, onBack }: Props) {
     try {
       await invoke("remove_mod", { modId: id });
       setMods((prev) => prev.filter((m) => m.id !== id));
-    } catch (e) { setError(String(e)); } finally { setWorking(null); }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setWorking(null);
+    }
   }
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".jar"
-        className="hidden"
-        onChange={handleFileSelected}
-      />
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -113,7 +116,6 @@ export function Mods({ server, onBack }: Props) {
         </div>
       )}
 
-      {/* List */}
       {mods.length === 0 ? (
         <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed text-center text-muted-foreground p-12">
           <div>

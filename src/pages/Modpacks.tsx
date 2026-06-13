@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, Layers, Trash2, Upload, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { Server } from "../types";
 
 interface ModpackDto {
@@ -37,37 +38,41 @@ export function Modpacks({ server, onBack }: Props) {
   const [installing, setInstalling] = useState(false);
   const [progress, setProgress]     = useState<ProgressEvent | null>(null);
   const [summary, setSummary]       = useState<InstallSummaryDto | null>(null);
-  const fileInputRef                = useRef<HTMLInputElement>(null);
 
   async function refresh() {
     try {
       const list = await invoke<ModpackDto[]>("list_modpacks", { serverId: server.id });
       setModpacks(list);
-    } catch (e) { setError(String(e)); }
+    } catch (e) {
+      setError(String(e));
+    }
   }
 
   useEffect(() => { refresh(); }, [server.id]);
 
-  function handleInstallClick() {
+  async function handleInstallClick() {
     setError(null);
     setSummary(null);
-    fileInputRef.current?.click();
-  }
 
-  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
+    // Native file picker — no prompt(), no manual paths
+    const selected = await open({
+      title: "Seleccionar modpack",
+      filters: [
+        { name: "Modpack", extensions: ["mrpack", "zip"] },
+      ],
+      multiple: false,
+      directory: false,
+    });
 
-    const sourcePath = (file as unknown as { path?: string }).path
-      ?? prompt(`Introduce la ruta absoluta al archivo:\n${file.name}`);
+    if (!selected) return; // user cancelled
+    const sourcePath = typeof selected === "string" ? selected : selected[0];
     if (!sourcePath) return;
 
     setInstalling(true);
     setProgress(null);
 
-    // Listen to progress events
     const eventName = `modpack-progress:${server.id}`;
+    // Subscribe to progress events BEFORE invoking so we don't miss early events
     const unlisten = await listen<ProgressEvent>(eventName, (evt) => {
       setProgress(evt.payload);
     });
@@ -94,7 +99,9 @@ export function Modpacks({ server, onBack }: Props) {
     try {
       await invoke("delete_modpack", { modpackId: id });
       setModpacks((prev) => prev.filter((m) => m.id !== id));
-    } catch (e) { setError(String(e)); }
+    } catch (e) {
+      setError(String(e));
+    }
   }
 
   const progressPct = progress && progress.total > 0
@@ -103,14 +110,6 @@ export function Modpacks({ server, onBack }: Props) {
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".mrpack,.zip"
-        className="hidden"
-        onChange={handleFileSelected}
-      />
-
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -130,29 +129,34 @@ export function Modpacks({ server, onBack }: Props) {
           disabled={installing}
           className="flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
-          {installing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+          {installing
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <Upload className="h-3.5 w-3.5" />}
           {installing ? "Instalando…" : "Instalar modpack"}
         </button>
       </div>
 
-      {/* Progress bar */}
+      {/* Progress */}
       {installing && (
         <div className="rounded-lg border bg-card p-4 flex flex-col gap-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground truncate max-w-xs">
-              {progress?.file ?? "Preparando…"}
+              {progress ? `Descargando: ${progress.file}` : "Preparando archivos…"}
             </span>
             {progressPct !== null && (
-              <span className="text-xs font-mono">{progressPct}%</span>
+              <span className="text-xs font-mono tabular-nums">{progressPct}%</span>
             )}
           </div>
-          {progressPct !== null && (
-            <div className="h-2 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full bg-primary transition-all duration-200"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: progressPct !== null ? `${progressPct}%` : "0%" }}
+            />
+          </div>
+          {progress && (
+            <p className="text-xs text-muted-foreground">
+              {progress.done} / {progress.total} archivos
+            </p>
           )}
         </div>
       )}
@@ -178,7 +182,6 @@ export function Modpacks({ server, onBack }: Props) {
         </div>
       )}
 
-      {/* List */}
       {modpacks.length === 0 ? (
         <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed text-center text-muted-foreground p-12">
           <div>

@@ -6,6 +6,19 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.2] — Estabilización v1.0 (BUG #4 + BUG #5)
+
+### Fixed
+- **BUG #4 — Selector de archivos nativo en Mods y Modpacks**:
+  - `src/pages/Mods.tsx`: reemplazado `<input type="file">` + `prompt()` por `open()` de `@tauri-apps/plugin-dialog`. El picker nativo del SO devuelve la ruta real del sistema de archivos.
+  - `src/pages/Modpacks.tsx`: ídem para archivos `.mrpack` y `.zip`. Eliminado completamente el fallback `prompt("Introduce la ruta…")`.
+  - Añadido plugin `tauri-plugin-dialog` al backend (`src-tauri/Cargo.toml`, `lib.rs`), configuración del plugin en `tauri.conf.json` y permiso `dialog:allow-open` en `src-tauri/capabilities/default.json`.
+- **BUG #5 — Instalador de modpack se quedaba en "Preparando…"**:
+  - `crates/cubed-infrastructure/src/modpacks/modpack_installer.rs`: las funciones `read_mrpack_index`, `read_cf_manifest` y `extract_jars_from_zip` usaban `std::fs::File::open` y `zip::ZipArchive` (I/O síncrona) dentro del runtime async de Tokio, bloqueando el hilo y evitando que los eventos de progreso llegasen al frontend.
+  - Fix: todas las operaciones ZIP bloqueantes se mueven a `tokio::task::spawn_blocking`.
+  - El callback de progreso se convierte a `Arc<dyn Fn(InstallProgress) + Send + Sync>` para poder clonarse en los closures de `spawn_blocking`.
+  - `src/pages/Modpacks.tsx`: el listener de progreso (`listen()`) se suscribe **antes** de llamar a `invoke("install_modpack")` para evitar la condición de carrera donde los primeros eventos se perdían.
+
 ## [1.0.1] — Estabilización v1.0 (BUG #1 + BUG #2)
 
 ### Fixed

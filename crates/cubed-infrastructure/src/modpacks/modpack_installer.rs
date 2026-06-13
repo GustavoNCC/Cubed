@@ -47,8 +47,6 @@ struct CfFile {
     project_id: Option<u64>,
     #[serde(rename = "fileID")]
     file_id: Option<u64>,
-    // CurseForge files can't be downloaded directly without an API key,
-    // so we record them but skip the download (user must add manually).
     #[serde(default)]
     url: Option<String>,
 }
@@ -74,11 +72,6 @@ impl ModpackInstaller {
         Arc::new(Self { servers, modpacks })
     }
 
-    /// Full install pipeline:
-    /// 1. Import record into DB
-    /// 2. Read manifest
-    /// 3. Download / copy files into `install_dir`
-    /// 4. Return the persisted Modpack and a summary
     pub async fn install(
         &self,
         server_id: Uuid,
@@ -86,16 +79,18 @@ impl ModpackInstaller {
         install_dir: &str,
         progress_cb: impl Fn(InstallProgress) + Send + Sync + 'static,
     ) -> ApplicationResult<(Modpack, InstallSummary)> {
-        // Import record
         let uc = ImportModpack::new(self.servers.clone(), self.modpacks.clone());
         let modpack = uc.execute(ImportModpackInput {
             server_id,
             source_path: source_path.to_string(),
         }).await?;
 
+        // Wrap in Arc so it can be cloned into spawn_blocking closures
+        let cb: Arc<dyn Fn(InstallProgress) + Send + Sync + 'static> = Arc::new(progress_cb);
+
         let summary = match modpack.format() {
-            ModpackFormat::Mrpack => self.install_mrpack(source_path, install_dir, &progress_cb).await?,
-            ModpackFormat::Zip    => self.install_zip(source_path, install_dir, &progress_cb).await?,
+            ModpackFormat::Mrpack => self.install_mrpack(source_path, install_dir, cb).await?,
+            ModpackFormat::Zip    => self.install_zip(source_path, install_dir, cb).await?,
         };
 
         Ok((modpack, summary))
@@ -105,12 +100,15 @@ impl ModpackInstaller {
         &self,
         source_path: &str,
         install_dir: &str,
-        progress_cb: &(impl Fn(InstallProgress) + Send + Sync),
+        progress_cb: Arc<dyn Fn(InstallProgress) + Send + Sync + 'static>,
     ) -> ApplicationResult<InstallSummary> {
-        let index = read_mrpack_index(source_path)?;
+        // Parse manifest on blocking thread pool — zip crate is synchronous
+        let sp = source_path.to_string();
+        let index = tokio::task::spawn_blocking(move || read_mrpack_index(&sp))
+            .await
+            .map_err(|e| ApplicationError::Infrastructure(format!("spawn_blocking: {}", e)))??;
 
-        // Only server-side or universal files
-        let files: Vec<&MrpackFile> = index.files.iter()
+        let files: Vec<MrpackFile> = index.files.into_iter()
             .filter(|f| {
                 f.env.as_ref()
                     .and_then(|e| e.server.as_deref())
@@ -140,7 +138,6 @@ impl ModpackInstaller {
                 current_file: file_name.to_string(),
             });
 
-            // Try each mirror
             let mut success = false;
             for url in &file.downloads {
                 match download_file(&client, url, &mods_dir, file_name).await {
@@ -172,15 +169,20 @@ impl ModpackInstaller {
         &self,
         source_path: &str,
         install_dir: &str,
-        progress_cb: &(impl Fn(InstallProgress) + Send + Sync),
+        progress_cb: Arc<dyn Fn(InstallProgress) + Send + Sync + 'static>,
     ) -> ApplicationResult<InstallSummary> {
         let mods_dir = format!("{}/mods", install_dir);
         fs::create_dir_all(&mods_dir).await.map_err(|e| {
             ApplicationError::Infrastructure(format!("No se pudo crear mods/: {}", e))
         })?;
 
-        // Try CurseForge manifest first
-        match read_cf_manifest(source_path) {
+        // Parse CF manifest on blocking thread
+        let sp = source_path.to_string();
+        let cf_result = tokio::task::spawn_blocking(move || read_cf_manifest(&sp))
+            .await
+            .map_err(|e| ApplicationError::Infrastructure(format!("spawn_blocking: {}", e)))?;
+
+        match cf_result {
             Ok(manifest) => {
                 let total = manifest.files.len();
                 let mut downloaded = 0usize;
@@ -202,24 +204,29 @@ impl ModpackInstaller {
                             Err(_) => skipped += 1,
                         }
                     } else {
-                        // CurseForge direct downloads require API key — skip
                         skipped += 1;
                     }
                 }
 
-                return Ok(InstallSummary {
+                Ok(InstallSummary {
                     name: manifest.name.unwrap_or_else(|| "Modpack".into()),
                     total_files: total,
                     downloaded,
                     skipped,
                     loader_info: None,
-                });
+                })
             }
             Err(_) => {
                 // Fallback: extract all .jar files from the zip into mods/
-                extract_jars_from_zip(source_path, &mods_dir, progress_cb)?;
+                let sp2 = source_path.to_string();
+                let md = mods_dir.clone();
+                let cb2 = progress_cb.clone();
+                tokio::task::spawn_blocking(move || extract_jars_from_zip(&sp2, &md, &*cb2))
+                    .await
+                    .map_err(|e| ApplicationError::Infrastructure(format!("spawn_blocking: {}", e)))??;
+
                 let count = count_jars(&mods_dir).await;
-                return Ok(InstallSummary {
+                Ok(InstallSummary {
                     name: Path::new(source_path)
                         .file_stem()
                         .and_then(|s| s.to_str())
@@ -229,7 +236,7 @@ impl ModpackInstaller {
                     downloaded: count,
                     skipped: 0,
                     loader_info: None,
-                });
+                })
             }
         }
     }
@@ -287,7 +294,7 @@ fn read_cf_manifest(path: &str) -> ApplicationResult<CfManifest> {
 fn extract_jars_from_zip(
     zip_path: &str,
     dest_dir: &str,
-    progress_cb: &(impl Fn(InstallProgress) + Send + Sync),
+    progress_cb: &(dyn Fn(InstallProgress) + Send + Sync),
 ) -> ApplicationResult<()> {
     let file = std::fs::File::open(zip_path).map_err(|e| {
         ApplicationError::Infrastructure(format!("No se pudo abrir ZIP: {}", e))
@@ -309,9 +316,10 @@ fn extract_jars_from_zip(
         let file_name = Path::new(&name)
             .file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or(&name);
+            .unwrap_or(&name)
+            .to_string();
 
-        progress_cb(InstallProgress { total, done, current_file: file_name.to_string() });
+        progress_cb(InstallProgress { total, done, current_file: file_name.clone() });
 
         let dest = format!("{}/{}", dest_dir, file_name);
         let mut out = std::fs::File::create(&dest).map_err(|e| {
@@ -402,7 +410,6 @@ mod tests {
         use tempfile::tempdir;
         use std::io::Write;
 
-        // Build a minimal .mrpack (ZIP with modrinth.index.json, no file downloads)
         let dir = tempdir().unwrap();
         let pack_path = dir.path().join("test.mrpack");
         let manifest = r#"{
@@ -435,9 +442,8 @@ mod tests {
 
         assert_eq!(mp.format(), &ModpackFormat::Mrpack);
         assert_eq!(summary.name, "TestPack");
-        assert_eq!(summary.total_files, 0); // empty files list
+        assert_eq!(summary.total_files, 0);
         assert!(summary.loader_info.as_deref().unwrap_or("").contains("fabric-loader"));
-        // Verify persisted
         assert!(repo.find_by_id(mp.id()).await.unwrap().is_some());
     }
 }
