@@ -6,6 +6,7 @@ use std::sync::Arc;
 use commands::AppState;
 use event_bus::EventBus;
 use tauri::Manager;
+use tokio::sync::RwLock;
 use tracing_subscriber::EnvFilter;
 use cubed_infrastructure::{
     FileBackupManager, FileModManager, InMemoryBackupRepo, InMemoryModpackRepo,
@@ -42,6 +43,13 @@ pub fn run() {
     let modpack_repo  = InMemoryModpackRepo::new();
     let modpack_inst  = ModpackInstaller::new(repo.clone(), modpack_repo.clone());
     let network       = Arc::new(TailscaleNetworkManager::new());
+    let settings      = Arc::new(RwLock::new(cubed_domain::entities::Settings {
+        servers_dir:          servers_dir.clone(),
+        backups_dir:          "/tmp/cubed-dev/backups".into(),
+        downloads_dir:        "/tmp/cubed-dev/downloads".into(),
+        default_java_path:    "/usr/bin/java".into(),
+        backup_interval_secs: 18_000, // 5 horas por defecto
+    }));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -53,8 +61,8 @@ pub fn run() {
                 resources, backup_repo, backup_mgr,
                 mod_repo, mod_mgr,
                 modpack_repo, modpack_inst,
-                network,
-                event_bus,
+                network, event_bus,
+                settings,
             });
             Ok(())
         })
@@ -86,6 +94,8 @@ pub fn run() {
             commands::tailscale_status,
             commands::tailscale_ip,
             commands::server_connect_address,
+            commands::get_settings,
+            commands::save_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar la aplicación Cubed");

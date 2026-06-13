@@ -2,10 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, State};
+use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use cubed_domain::entities::{ServerSoftware, ServerStatus};
+use cubed_domain::entities::{ServerSoftware, ServerStatus, Settings};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
 use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModpackRepository, ModRepository, NetworkManager, ProcessManager, ResourceMonitor, ServerRepository, TailscaleStatus};
 use cubed_application::use_cases::{DeleteBackup, ListBackups, ListMods};
@@ -62,6 +63,8 @@ pub struct AppState {
     pub modpack_inst:  Arc<ModpackInstaller>,
     pub network:       Arc<TailscaleNetworkManager>,
     pub event_bus:     Arc<EventBus>,
+    /// Configuración global mutable en memoria (persistida en futuras fases).
+    pub settings:      Arc<RwLock<Settings>>,
 }
 
 // ── Server commands ──────────────────────────────────────────────────────────
@@ -707,4 +710,79 @@ pub async fn server_connect_address(
         .ok_or_else(|| format!("Servidor {} no encontrado", server_id))?;
     let ip = state.network.tailscale_ip().await.map_err(|e| e.to_string())?;
     Ok(ip.map(|addr| format!("{}:{}", addr, server.port().value())))
+}
+
+// ── Settings commands ─────────────────────────────────────────────────────────
+
+/// DTO de configuración expuesto al frontend.
+#[derive(Serialize, Clone)]
+pub struct SettingsDto {
+    pub servers_dir:           String,
+    pub backups_dir:           String,
+    pub downloads_dir:         String,
+    pub default_java_path:     String,
+    /// Intervalo de backup automático en segundos (0 = desactivado).
+    pub backup_interval_secs:  u64,
+}
+
+#[derive(Deserialize)]
+pub struct SaveSettingsCmd {
+    pub servers_dir:           String,
+    pub backups_dir:           String,
+    pub downloads_dir:         String,
+    pub default_java_path:     String,
+    pub backup_interval_secs:  u64,
+}
+
+#[tauri::command]
+pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsDto, String> {
+    let s = state.settings.read().await;
+    Ok(SettingsDto {
+        servers_dir:          s.servers_dir.clone(),
+        backups_dir:          s.backups_dir.clone(),
+        downloads_dir:        s.downloads_dir.clone(),
+        default_java_path:    s.default_java_path.clone(),
+        backup_interval_secs: s.backup_interval_secs,
+    })
+}
+
+#[tauri::command]
+pub async fn save_settings(
+    cmd: SaveSettingsCmd,
+    state: State<'_, AppState>,
+) -> Result<SettingsDto, String> {
+    // Basic validation
+    if cmd.servers_dir.trim().is_empty() {
+        return Err("El directorio de servidores no puede estar vacío".into());
+    }
+    if cmd.backups_dir.trim().is_empty() {
+        return Err("El directorio de backups no puede estar vacío".into());
+    }
+
+    {
+        let mut s = state.settings.write().await;
+        s.servers_dir          = cmd.servers_dir.trim().to_string();
+        s.backups_dir          = cmd.backups_dir.trim().to_string();
+        s.downloads_dir        = cmd.downloads_dir.trim().to_string();
+        s.default_java_path    = cmd.default_java_path.trim().to_string();
+        s.backup_interval_secs = cmd.backup_interval_secs;
+    }
+
+    // Reschedule automatic backup with the new interval
+    {
+        let s = state.settings.read().await;
+        state.backup_mgr
+            .restart_auto_backup(s.backup_interval_secs, s.servers_dir.clone())
+            .await;
+        info!(interval_secs = s.backup_interval_secs, "backup scheduler updated");
+    }
+
+    let s = state.settings.read().await;
+    Ok(SettingsDto {
+        servers_dir:          s.servers_dir.clone(),
+        backups_dir:          s.backups_dir.clone(),
+        downloads_dir:        s.downloads_dir.clone(),
+        default_java_path:    s.default_java_path.clone(),
+        backup_interval_secs: s.backup_interval_secs,
+    })
 }

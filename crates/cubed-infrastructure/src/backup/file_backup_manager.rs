@@ -153,6 +153,41 @@ impl FileBackupManager {
             h.abort();
         }
     }
+
+    /// Detiene el scheduler anterior (si existe) y arranca uno nuevo que
+    /// hace backup de todos los servidores conocidos cada `interval_secs`.
+    /// Pasa `servers_dir` para construir la ruta de cada servidor.
+    /// Si `interval_secs == 0` solo detiene el scheduler.
+    pub async fn restart_auto_backup(self: &Arc<Self>, interval_secs: u64, servers_dir: String) {
+        // Cancel previous task
+        self.stop_scheduler().await;
+
+        if interval_secs == 0 {
+            return;
+        }
+
+        let this    = self.clone();
+        let sdir    = servers_dir;
+        let handle  = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(interval_secs)).await;
+                let servers = match this.servers.find_all().await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::warn!("auto-backup: failed to list servers: {}", e);
+                        continue;
+                    }
+                };
+                for srv in servers {
+                    let server_dir = format!("{}/{}", sdir, srv.name());
+                    if let Err(e) = this.backup_server(srv.id(), srv.name().as_str(), &server_dir).await {
+                        tracing::warn!(server_id = %srv.id(), "auto-backup failed: {}", e);
+                    }
+                }
+            }
+        });
+        *self.scheduler.lock().await = Some(handle);
+    }
 }
 
 #[cfg(test)]

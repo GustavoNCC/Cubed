@@ -41,6 +41,15 @@ export interface TailscaleStatusDto {
   hostname: string | null;
 }
 
+export interface SettingsDto {
+  servers_dir: string;
+  backups_dir: string;
+  downloads_dir: string;
+  default_java_path: string;
+  /** Intervalo de backup automático en segundos. 0 = desactivado. */
+  backup_interval_secs: number;
+}
+
 export interface BackupDto {
   id: string;
   server_id: string;

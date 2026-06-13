@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { BackupDto, Server, CreateServerForm, SystemStats, ServerStats, TailscaleStatusDto } from "./types";
+import type { BackupDto, Server, CreateServerForm, SystemStats, ServerStats, TailscaleStatusDto, SettingsDto } from "./types";
 
 export const api = {
   listServers: () => invoke<Server[]>("list_servers"),
@@ -22,4 +22,7 @@ export const api = {
   tailscaleStatus: () => invoke<TailscaleStatusDto>("tailscale_status"),
   tailscaleIp: () => invoke<string | null>("tailscale_ip"),
   serverConnectAddress: (serverId: string) => invoke<string | null>("server_connect_address", { serverId }),
+  // Settings
+  getSettings: () => invoke<SettingsDto>("get_settings"),
+  saveSettings: (cmd: Omit<SettingsDto, never>) => invoke<SettingsDto>("save_settings", { cmd }),
 };

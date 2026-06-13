@@ -6,6 +6,26 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.4] — Estabilización v1.0 (BUG #8 + BUG #9)
+
+### Fixed
+- **BUG #8 — Versión mostraba v0.0.0 en lugar de v1.0.0**:
+  - `package.json`: `"version": "1.0.0"`.
+  - `src-tauri/tauri.conf.json`: `"version": "1.0.0"`.
+  - `Cargo.toml` (workspace): `version = "1.0.0"` — todos los crates internos heredan la versión vía `version.workspace = true`.
+  - `src/pages/Settings.tsx`: muestra `v1.0.0` en el encabezado.
+- **BUG #9 — Intervalo de backup hardcodeado a 5 horas sin posibilidad de cambiarlo**:
+  - `crates/cubed-domain/src/entities/settings.rs`: entidad `Settings` ya existía, sin cambios.
+  - `crates/cubed-infrastructure/src/backup/file_backup_manager.rs`: nuevo método `restart_auto_backup(interval_secs, servers_dir)` que cancela el scheduler previo y arranca uno nuevo usando el repo de servidores interno; si `interval_secs == 0` solo cancela.
+  - `src-tauri/src/commands.rs`:
+    - `AppState` incluye `settings: Arc<RwLock<Settings>>`.
+    - Nuevos comandos `get_settings` y `save_settings` que leen/escriben el `RwLock` y reinician el scheduler de backups vía `restart_auto_backup`.
+    - DTO `SettingsDto` y `SaveSettingsCmd`.
+  - `src-tauri/src/lib.rs`: `Settings` inicializado con valores de desarrollo y añadido al `AppState`.
+  - `src/types.ts`: interfaz `SettingsDto` añadida.
+  - `src/api.ts`: `getSettings()` y `saveSettings()` añadidos.
+  - `src/pages/Settings.tsx`: completamente reescrito como formulario editable — campos de directorios, Java path y selector de intervalo de backup (Desactivado / 30 min / 1 h / 3 h / 5 h / 12 h / 24 h). Carga la configuración del backend al montar, muestra feedback de éxito/error al guardar.
+
 ## [1.0.3] — Estabilización v1.0 (BUG #6 + BUG #7)
 
 ### Fixed
