@@ -16,6 +16,7 @@ export const api = {
     invoke<void>("restore_backup", { backupId, restoreDir }),
   deleteBackup: (backupId: string, deleteFile = true) =>
     invoke<void>("delete_backup", { backupId, deleteFile }),
+  suggestFreePort: () => invoke<number>("suggest_free_port"),
   // Network / Tailscale
   tailscaleIsInstalled: () => invoke<boolean>("tailscale_is_installed"),
   tailscaleStatus: () => invoke<TailscaleStatusDto>("tailscale_status"),

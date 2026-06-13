@@ -78,6 +78,7 @@ pub fn run() {
             commands::install_modpack,
             commands::list_modpacks,
             commands::delete_modpack,
+            commands::suggest_free_port,
             commands::tailscale_is_installed,
             commands::tailscale_status,
             commands::tailscale_ip,

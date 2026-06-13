@@ -6,6 +6,28 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.1] — Estabilización v1.0 (BUG #1 + BUG #2)
+
+### Fixed
+- **BUG #1 — Layout roto en ServerCard** (`src/components/ServerCard.tsx`):
+  - Rediseño completo con dos filas de acciones: primarias (Iniciar/Detener + Dirección/Eliminar) y secundarias (Consola/Backups/Mods/Modpacks).
+  - Nombre del servidor con `truncate` — soporta nombres largos sin romper el layout.
+  - Badge de software con color por tipo (Paper=rojo, Purpur=morado, Fabric=azul, Forge=naranja, NeoForge=amber).
+  - Botones con variantes semánticas: `primary`, `danger-outline`, `destructive`, `ghost`, `nav`.
+  - Layout responsive con `flex-wrap` — funciona en cualquier ancho.
+  - Separador visual entre header y acciones.
+- **BUG #2 — Asignación automática de puertos**:
+  - Nuevo comando Tauri `suggest_free_port` (`src-tauri/src/commands.rs`): busca el primer puerto >= 25565 libre en el SO **y** no usado por ningún servidor registrado en Cubed.
+  - `api.suggestFreePort()` añadido a `src/api.ts`.
+  - `CreateServerModal` auto-sugiere el puerto al abrirse (indicador verde "Puerto libre detectado").
+  - Botón ↺ para re-buscar un puerto libre manualmente.
+  - Puerto editable manualmente si el usuario lo prefiere.
+- **BUG #3 — Software poco claro** (`src/components/CreateServerModal.tsx`):
+  - Selector de software rediseñado como lista de radio cards con descripción y badge contextual.
+  - Cada opción explica qué es (Paper=plugins, Fabric/Forge/NeoForge=mods) en lenguaje no técnico.
+  - Aviso contextual cuando el software seleccionado soporta mods.
+  - Configuración avanzada (Java path, servers_dir) oculta en `<details>` para no abrumar usuarios nuevos.
+
 ## [0.16.0] — Fase 16: Hardening
 
 ### Changed

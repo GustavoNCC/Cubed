@@ -9,7 +9,8 @@ use cubed_application::use_cases::{CreateServer, CreateServerInput};
 use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModpackRepository, ModRepository, NetworkManager, ResourceMonitor, ServerRepository, TailscaleStatus};
 use cubed_application::use_cases::{DeleteBackup, ListBackups, ListMods};
 use cubed_application::CubedEvent;
-use cubed_infrastructure::{FileBackupManager, FileModManager, MinecraftConsoleManager, ModpackInstaller, SysInfoResourceMonitor, TailscaleNetworkManager};
+use cubed_infrastructure::{FileBackupManager, FileModManager, MinecraftConsoleManager, ModpackInstaller, SysInfoResourceMonitor, TailscaleNetworkManager, TcpPortManager};
+use cubed_application::ports::PortManager;
 use crate::event_bus::EventBus;
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -556,6 +557,27 @@ pub async fn tailscale_status(state: State<'_, AppState>) -> Result<TailscaleSta
 #[tauri::command]
 pub async fn tailscale_ip(state: State<'_, AppState>) -> Result<Option<String>, String> {
     state.network.tailscale_ip().await.map_err(|e| e.to_string())
+}
+
+/// Devuelve el primer puerto libre >= 25565 que no esté en uso por el SO
+/// ni por ningún servidor registrado en Cubed.
+#[tauri::command]
+pub async fn suggest_free_port(state: State<'_, AppState>) -> Result<u16, String> {
+    let mgr = TcpPortManager::new();
+    let used: std::collections::HashSet<u16> = state.repo
+        .find_all().await.map_err(|e| e.to_string())?
+        .iter().map(|s| s.port().value()).collect();
+
+    let mut candidate = 25565u16;
+    loop {
+        if candidate > 65535 {
+            return Err("No se encontró un puerto libre".into());
+        }
+        if !used.contains(&candidate) && mgr.is_free(candidate).await.unwrap_or(false) {
+            return Ok(candidate);
+        }
+        candidate += 1;
+    }
 }
 
 /// Construye la dirección de conexión al servidor: `<tailscale_ip>:<port>`.
