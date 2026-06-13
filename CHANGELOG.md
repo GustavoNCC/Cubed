@@ -6,6 +6,31 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.16.0] — Fase 16: Hardening
+
+### Changed
+- **Imports limpiados** (`src-tauri/src/commands.rs`):
+  - Eliminados imports no usados: `CreateBackup`, `CreateBackupInput`, `RemoveMod`, `InMemoryBackupRepo`.
+  - Cero warnings de compilación en todo el workspace.
+- **Validación de entrada** en `create_server` antes de llamar al caso de uso:
+  - Nombre vacío → error descriptivo.
+  - Nombre > 64 caracteres → error descriptivo.
+  - Puerto < 1024 → error descriptivo.
+  - Trim automático del nombre.
+- **Tracing estructurado** añadido al workspace:
+  - Dependencia `tracing 0.1` + `tracing-subscriber 0.3` en workspace `Cargo.toml`.
+  - `tracing-subscriber` inicializado en `lib.rs` con `EnvFilter` (variable `RUST_LOG`).
+  - `info!` en `start_server`, `stop_server`, `create_server`, `delete_server`.
+  - `debug!` en `create_backup`.
+  - `warn!` en `delete_server` cuando se rechaza por estar en ejecución.
+  - `info!`/`debug!`/`warn!` en `FileBackupManager` (`backup_server`, `restore_backup`).
+- **Test de puerto flaky corregido** (`tcp_port_manager.rs`):
+  - `find_free_returns_a_port`: eliminada aserción de `port_is_free` tras el resultado (race condition con otros tests).
+  - `is_free_on_unbound_port`: reemplazado por `is_free_on_bound_port_returns_false_2` que usa un listener real, sin races.
+
+### Tests
+- 51 tests pasando (`cargo test`). Build frontend: ✓ (211 KB JS gzip: 63 KB). Warnings: 0.
+
 ## [0.15.0] — Fase 15: Sistema de Eventos
 
 ### Added

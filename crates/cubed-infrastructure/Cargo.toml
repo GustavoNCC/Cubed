@@ -19,6 +19,7 @@ reqwest = { workspace = true }
 futures-util = "0.3"
 sysinfo = { workspace = true }
 zip = "2"
+tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

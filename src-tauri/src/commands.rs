@@ -1,14 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use cubed_domain::entities::{ServerSoftware, ServerStatus};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
 use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModpackRepository, ModRepository, NetworkManager, ResourceMonitor, ServerRepository, TailscaleStatus};
-use cubed_application::use_cases::{CreateBackup, CreateBackupInput, DeleteBackup, ListBackups, ListMods, RemoveMod};
+use cubed_application::use_cases::{DeleteBackup, ListBackups, ListMods};
 use cubed_application::CubedEvent;
-use cubed_infrastructure::{FileBackupManager, FileModManager, InMemoryBackupRepo, MinecraftConsoleManager, ModpackInstaller, SysInfoResourceMonitor, TailscaleNetworkManager};
+use cubed_infrastructure::{FileBackupManager, FileModManager, MinecraftConsoleManager, ModpackInstaller, SysInfoResourceMonitor, TailscaleNetworkManager};
 use crate::event_bus::EventBus;
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -72,16 +73,26 @@ pub async fn create_server(
     cmd: CreateServerCmd,
     state: State<'_, AppState>,
 ) -> Result<ServerDto, String> {
+    if cmd.name.trim().is_empty() {
+        return Err("El nombre del servidor no puede estar vacío".into());
+    }
+    if cmd.name.len() > 64 {
+        return Err("El nombre del servidor no puede superar 64 caracteres".into());
+    }
+    if cmd.port < 1024 {
+        return Err("El puerto debe ser >= 1024".into());
+    }
     let software = parse_software(&cmd.software)?;
     let uc = CreateServer::new(state.repo.clone(), state.fs.clone());
     let server = uc.execute(CreateServerInput {
-        name: cmd.name,
+        name: cmd.name.trim().to_string(),
         version: cmd.version,
         software,
         port: cmd.port,
         java_path: cmd.java_path,
         servers_dir: cmd.servers_dir,
     }).await.map_err(|e| e.to_string())?;
+    info!(server_id = %server.id(), name = %server.name(), "server created");
     Ok(server_to_dto(&server))
 }
 
@@ -94,6 +105,7 @@ pub async fn start_server(id: String, state: State<'_, AppState>) -> Result<Serv
     server.start().map_err(|e| e.to_string())?;
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
     state.event_bus.emit(CubedEvent::ServerStarted { server_id: uuid });
+    info!(server_id = %uuid, "server started");
     Ok(server_to_dto(&server))
 }
 
@@ -106,6 +118,7 @@ pub async fn stop_server(id: String, state: State<'_, AppState>) -> Result<Serve
     server.stop().map_err(|e| e.to_string())?;
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
     state.event_bus.emit(CubedEvent::ServerStopped { server_id: uuid });
+    info!(server_id = %uuid, "server stopped");
     Ok(server_to_dto(&server))
 }
 
@@ -116,9 +129,12 @@ pub async fn delete_server(id: String, state: State<'_, AppState>) -> Result<(),
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
     if server.is_running() {
+        warn!(server_id = %uuid, "delete rejected: server is running");
         return Err("No se puede eliminar un servidor en ejecución".into());
     }
-    state.repo.delete(uuid).await.map_err(|e| e.to_string())
+    state.repo.delete(uuid).await.map_err(|e| e.to_string())?;
+    info!(server_id = %uuid, "server deleted");
+    Ok(())
 }
 
 // ── Console commands ──────────────────────────────────────────────────────────
@@ -299,6 +315,7 @@ pub async fn create_backup(
         .await
         .map_err(|e| e.to_string())?;
     state.event_bus.emit(CubedEvent::BackupCreated { server_id: uuid, backup_id: backup.id() });
+    debug!(server_id = %uuid, backup_id = %backup.id(), "backup created");
     Ok(backup_to_dto(&backup))
 }
 

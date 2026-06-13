@@ -4,6 +4,7 @@ use tokio::fs;
 use tokio::process::Command;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use cubed_application::error::{ApplicationError, ApplicationResult};
@@ -43,6 +44,7 @@ impl FileBackupManager {
         server_name: &str,
         server_dir: &str,
     ) -> ApplicationResult<Backup> {
+        debug!(server_id = %server_id, server_dir, "starting backup");
         let ts = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let filename = format!("{}_{}.tar.gz", server_name, ts);
         let dest = format!("{}/{}", self.backups_dir, filename);
@@ -78,6 +80,7 @@ impl FileBackupManager {
             ApplicationError::Infrastructure(format!("No se pudo leer metadata del backup: {}", e))
         })?;
 
+        info!(server_id = %server_id, dest, size_bytes = meta.len(), "backup created");
         let uc = CreateBackup::new(self.servers.clone(), self.repo.clone());
         uc.execute(CreateBackupInput {
             server_id,
@@ -111,10 +114,12 @@ impl FileBackupManager {
             .map_err(|e| ApplicationError::Infrastructure(format!("tar restore falló: {}", e)))?;
 
         if !status.success() {
+            warn!(backup_id = %backup_id, "tar restore failed");
             return Err(ApplicationError::Infrastructure(
                 format!("tar restore terminó con código {:?}", status.code()),
             ));
         }
+        info!(backup_id = %backup_id, restore_dir, "backup restored");
         Ok(())
     }
 

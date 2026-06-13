@@ -6,6 +6,7 @@ use std::sync::Arc;
 use commands::AppState;
 use event_bus::EventBus;
 use tauri::Manager;
+use tracing_subscriber::EnvFilter;
 use cubed_infrastructure::{
     FileBackupManager, FileModManager, InMemoryBackupRepo, InMemoryModpackRepo,
     InMemoryModRepo, LocalFileSystem, MinecraftConsoleManager,
@@ -19,6 +20,11 @@ fn health_check() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env().add_directive(
+            "cubed=debug".parse().expect("valid directive"),
+        ))
+        .init();
     let repo        = in_memory_repo::InMemoryServerRepo::new();
     let fs          = Arc::new(LocalFileSystem::new("/tmp/cubed-dev"));
     let console     = Arc::new(MinecraftConsoleManager::new());
