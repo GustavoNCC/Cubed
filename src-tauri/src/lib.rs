@@ -3,7 +3,7 @@ mod in_memory_repo;
 
 use std::sync::Arc;
 use commands::AppState;
-use cubed_infrastructure::{LocalFileSystem, MinecraftConsoleManager};
+use cubed_infrastructure::{LocalFileSystem, MinecraftConsoleManager, SysInfoResourceMonitor};
 
 #[tauri::command]
 fn health_check() -> String {
@@ -12,13 +12,14 @@ fn health_check() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let repo    = in_memory_repo::InMemoryServerRepo::new();
-    let fs      = Arc::new(LocalFileSystem::new("/tmp/cubed-dev"));
-    let console = Arc::new(MinecraftConsoleManager::new());
+    let repo      = in_memory_repo::InMemoryServerRepo::new();
+    let fs        = Arc::new(LocalFileSystem::new("/tmp/cubed-dev"));
+    let console   = Arc::new(MinecraftConsoleManager::new());
+    let resources = Arc::new(SysInfoResourceMonitor::new());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(AppState { repo, fs, console })
+        .manage(AppState { repo, fs, console, resources })
         .invoke_handler(tauri::generate_handler![
             health_check,
             commands::list_servers,
@@ -29,6 +30,8 @@ pub fn run() {
             commands::subscribe_console,
             commands::send_console_command,
             commands::get_console_tail,
+            commands::get_system_stats,
+            commands::get_server_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar la aplicación Cubed");

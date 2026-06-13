@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use cubed_domain::entities::{ServerSoftware, ServerStatus};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
-use cubed_application::ports::{ConsoleLine, ConsoleManager, FileSystemManager, ServerRepository};
-use cubed_infrastructure::MinecraftConsoleManager;
+use cubed_application::ports::{ConsoleLine, ConsoleManager, FileSystemManager, ResourceMonitor, ServerRepository};
+use cubed_infrastructure::{MinecraftConsoleManager, SysInfoResourceMonitor};
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -41,9 +41,10 @@ pub struct ConsoleLineEvent {
 // ── App state ─────────────────────────────────────────────────────────────────
 
 pub struct AppState {
-    pub repo:    Arc<dyn ServerRepository>,
-    pub fs:      Arc<dyn FileSystemManager>,
-    pub console: Arc<MinecraftConsoleManager>,
+    pub repo:      Arc<dyn ServerRepository>,
+    pub fs:        Arc<dyn FileSystemManager>,
+    pub console:   Arc<MinecraftConsoleManager>,
+    pub resources: Arc<SysInfoResourceMonitor>,
 }
 
 // ── Server commands ──────────────────────────────────────────────────────────
@@ -196,4 +197,55 @@ fn parse_software(s: &str) -> Result<ServerSoftware, String> {
         "NeoForge" => Ok(ServerSoftware::NeoForge),
         other => Err(format!("Software desconocido: {}", other)),
     }
+}
+
+// ── Resource commands ─────────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct SystemStatsDto {
+    pub cpu_percent: f32,
+    pub ram_used_bytes: u64,
+    pub ram_total_bytes: u64,
+    pub disk_used_bytes: u64,
+    pub disk_total_bytes: u64,
+    pub net_rx_bytes: u64,
+    pub net_tx_bytes: u64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ServerStatsDto {
+    pub server_id: String,
+    pub cpu_percent: f32,
+    pub ram_bytes: u64,
+    pub uptime_secs: u64,
+}
+
+#[tauri::command]
+pub async fn get_system_stats(state: State<'_, AppState>) -> Result<SystemStatsDto, String> {
+    let s = state.resources.system_stats().await.map_err(|e| e.to_string())?;
+    Ok(SystemStatsDto {
+        cpu_percent: s.cpu_percent,
+        ram_used_bytes: s.ram_used_bytes,
+        ram_total_bytes: s.ram_total_bytes,
+        disk_used_bytes: s.disk_used_bytes,
+        disk_total_bytes: s.disk_total_bytes,
+        net_rx_bytes: s.net_rx_bytes,
+        net_tx_bytes: s.net_tx_bytes,
+    })
+}
+
+#[tauri::command]
+pub async fn get_server_stats(
+    id: String,
+    pid: u32,
+    state: State<'_, AppState>,
+) -> Result<Option<ServerStatsDto>, String> {
+    let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    let opt = state.resources.server_stats(uuid, pid).await.map_err(|e| e.to_string())?;
+    Ok(opt.map(|s| ServerStatsDto {
+        server_id: s.server_id.to_string(),
+        cpu_percent: s.cpu_percent,
+        ram_bytes: s.ram_bytes,
+        uptime_secs: s.uptime_secs,
+    }))
 }

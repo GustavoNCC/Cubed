@@ -6,6 +6,32 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.10.0] — Fase 10: Resource Manager
+
+### Added
+- **Dependencia `sysinfo 0.32`** — monitoreo de CPU, RAM, disco y red del SO anfitrión.
+- **Puerto `ResourceMonitor`** (`cubed-application/src/ports/resource_monitor.rs`):
+  - `SystemStats` — CPU%, RAM usada/total, disco usada/total, red RX/TX acumulados.
+  - `ServerStats` — CPU%, RAM (RSS), uptime en segundos de un proceso concreto.
+  - Trait async `system_stats()` y `server_stats(id, pid)`.
+- **`SysInfoResourceMonitor`** (`cubed-infrastructure/src/resources/`):
+  - `system_stats()` — agrega CPU global, memoria, todos los discos y todas las interfaces de red.
+  - `server_stats(pid)` — localiza el proceso por PID y devuelve su CPU%, RAM y uptime.
+  - Instancia única con `Mutex<System>` (sysinfo no es `Send` sin sincronización).
+  - 3 tests unitarios.
+- **2 comandos Tauri nuevos** (`src-tauri/src/commands.rs`):
+  - `get_system_stats` → `SystemStatsDto`.
+  - `get_server_stats(id, pid)` → `Option<ServerStatsDto>`.
+- **Dashboard actualizado** (`src/pages/Dashboard.tsx`):
+  - Sección "Recursos del sistema" con 4 tarjetas: CPU, RAM, Disco, Red.
+  - Barra de progreso con semáforo de color (verde/amarillo/rojo según uso).
+  - Polling automático cada 3 s para mantener valores frescos.
+- **`types.ts`** — nuevas interfaces `SystemStats` y `ServerStats`.
+- **`api.ts`** — métodos `getSystemStats()` y `getServerStats(id, pid)`.
+
+### Tests
+- 40 tests pasando (`cargo test`). Build frontend: ✓ (190 KB JS gzip: 60 KB).
+
 ## [0.9.0] — Fase 9: Console Manager
 
 ### Added

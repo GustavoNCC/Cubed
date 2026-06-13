@@ -12,6 +12,7 @@ pub mod java;
 pub mod persistence;
 pub mod port;
 pub mod process;
+pub mod resources;
 
 pub use console::MinecraftConsoleManager;
 pub use downloader::HttpDownloader;
@@ -20,3 +21,4 @@ pub use java::SystemJavaManager;
 pub use persistence::{connect, PostgresServerRepository};
 pub use port::TcpPortManager;
 pub use process::MinecraftProcessManager;
+pub use resources::SysInfoResourceMonitor;
