@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Cpu, HardDrive, MemoryStick, Network } from "lucide-react";
 import { api } from "../api";
 import { TailscalePanel } from "../components/TailscalePanel";
+import { CubedLogo } from "../components/CubedLogo";
 import type { Server, SystemStats } from "../types";
 
 interface Props {
@@ -69,7 +70,10 @@ export function Dashboard({ servers }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <div className="flex items-center gap-3">
+        <CubedLogo size={28} className="opacity-90 drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]" />
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+      </div>
 
       {/* Server counters */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

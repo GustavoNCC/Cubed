@@ -6,6 +6,24 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.7] — Estabilización v1.0 (BUG #14 + MEJORA #15)
+
+### Fixed
+- **BUG #14 — Los servidores desaparecen al cerrar la aplicación**:
+  - `crates/cubed-infrastructure/src/persistence/json_server_repository.rs` (**nuevo**): `JsonServerRepository` implementa `ServerRepository` persistiendo en un archivo JSON (`{app_data_dir}/servers.json`). Escrituras atómicas vía archivo temporal + rename para evitar corrupción. Al deserializar, estados `Running`/`Starting`/`Stopping` se normalizan a `Offline` ya que el proceso no puede seguir vivo tras un reinicio.
+  - `crates/cubed-infrastructure/src/persistence/mod.rs`: exporta `JsonServerRepository` y `check_integrity`.
+  - `crates/cubed-infrastructure/src/lib.rs`: re-exporta los nuevos tipos.
+  - `src-tauri/src/lib.rs`: reemplaza `InMemoryServerRepo` por `JsonServerRepository`. La ruta de la DB es `{tauri::app_data_dir}/servers.json` — directorio OS-específico (macOS: `~/Library/Application Support/com.cubed.app/`). Llama a `check_integrity()` en cada arranque para registrar inconsistencias DB↔filesystem.
+  - `crates/cubed-infrastructure/src/persistence/json_server_repository.rs` incluye 4 tests unitarios: `persist_and_reload`, `multiple_servers_persist`, `delete_persists`, `status_normalised_to_offline_on_reload` — todos OK.
+
+### Added
+- **MEJORA #15 — Branding e identidad visual de Cubed**:
+  - `src/components/CubedLogo.tsx` (**nuevo**): Logo SVG propio — letra "C" formada por 5 bloques isométricos con paleta cyberpunk (púrpura `#a855f7`, violeta `#7c3aed`, fucsia `#a21caf`) y highlights neon. Sin recursos externos ni copyright.
+  - `src-tauri/icons/cubed-logo.svg` (**nuevo**): Versión 512×512 del logo con fondo oscuro redondeado y texto "CUBED" — fuente SVG standalone editable.
+  - `src-tauri/icons/32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.png`: Regenerados con el nuevo logo isométrico cyberpunk (generados con Pillow/Python desde el diseño vectorial).
+  - `src/components/Sidebar.tsx`: Logo de texto "C" reemplazado por `<CubedLogo size={34} />` con glow púrpura.
+  - `src/pages/Dashboard.tsx`: Encabezado "Dashboard" incluye `<CubedLogo size={28} />` como branding contextual.
+
 ## [1.0.6] — Estabilización v1.0 (BUG #12 + BUG #13)
 
 ### Fixed

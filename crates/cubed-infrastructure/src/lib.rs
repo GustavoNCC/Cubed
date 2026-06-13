@@ -26,7 +26,7 @@ pub use console::MinecraftConsoleManager;
 pub use downloader::HttpDownloader;
 pub use fs::LocalFileSystem;
 pub use java::SystemJavaManager;
-pub use persistence::{connect, InMemoryServerRepo, PostgresServerRepository};
+pub use persistence::{connect, check_integrity, InMemoryServerRepo, JsonServerRepository, PostgresServerRepository};
 pub use port::TcpPortManager;
 pub use process::MinecraftProcessManager;
 pub use resources::SysInfoResourceMonitor;
