@@ -5,9 +5,9 @@ use uuid::Uuid;
 
 use cubed_domain::entities::{ServerSoftware, ServerStatus};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
-use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ResourceMonitor, ServerRepository};
-use cubed_application::use_cases::{CreateBackup, CreateBackupInput, DeleteBackup, ListBackups};
-use cubed_infrastructure::{FileBackupManager, InMemoryBackupRepo, MinecraftConsoleManager, SysInfoResourceMonitor};
+use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModRepository, ResourceMonitor, ServerRepository};
+use cubed_application::use_cases::{CreateBackup, CreateBackupInput, DeleteBackup, ListBackups, ListMods, RemoveMod};
+use cubed_infrastructure::{FileBackupManager, FileModManager, InMemoryBackupRepo, MinecraftConsoleManager, SysInfoResourceMonitor};
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -48,6 +48,8 @@ pub struct AppState {
     pub resources:   Arc<SysInfoResourceMonitor>,
     pub backup_repo: Arc<dyn BackupRepository>,
     pub backup_mgr:  Arc<FileBackupManager>,
+    pub mod_repo:    Arc<dyn ModRepository>,
+    pub mod_mgr:     Arc<FileModManager>,
 }
 
 // ── Server commands ──────────────────────────────────────────────────────────
@@ -331,4 +333,70 @@ pub async fn delete_backup(
         let _ = tokio::fs::remove_file(&path).await; // best-effort
     }
     Ok(())
+}
+
+// ── Mod commands ──────────────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct ModDto {
+    pub id: String,
+    pub server_id: String,
+    pub file_name: String,
+    pub path: String,
+}
+
+fn mod_to_dto(m: &cubed_domain::entities::ModEntry) -> ModDto {
+    ModDto {
+        id: m.id().to_string(),
+        server_id: m.server_id().to_string(),
+        file_name: m.file_name().to_string(),
+        path: m.path().to_string(),
+    }
+}
+
+/// Lista los mods de un servidor (ordenados por nombre).
+#[tauri::command]
+pub async fn list_mods(
+    server_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ModDto>, String> {
+    let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
+    let uc = ListMods::new(state.mod_repo.clone());
+    let list = uc.execute(uuid).await.map_err(|e| e.to_string())?;
+    Ok(list.iter().map(mod_to_dto).collect())
+}
+
+/// Instala un mod: valida el .jar, lo copia a mods/ y lo registra.
+#[tauri::command]
+pub async fn install_mod(
+    server_id: String,
+    source_path: String,
+    mods_dir: String,
+    state: State<'_, AppState>,
+) -> Result<ModDto, String> {
+    let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
+    let entry = state.mod_mgr
+        .install_mod(uuid, &source_path, &mods_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(mod_to_dto(&entry))
+}
+
+/// Elimina un mod: borra el .jar y lo quita del registro.
+#[tauri::command]
+pub async fn remove_mod(
+    mod_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let uuid = Uuid::parse_str(&mod_id).map_err(|e| e.to_string())?;
+    state.mod_mgr.remove_mod(uuid).await.map_err(|e| e.to_string())
+}
+
+/// Valida si un archivo es un .jar válido (cabecera PK).
+#[tauri::command]
+pub async fn validate_jar(path: String) -> Result<bool, String> {
+    match cubed_infrastructure::FileModManager::validate_jar(&path).await {
+        Ok(()) => Ok(true),
+        Err(_) => Ok(false),
+    }
 }

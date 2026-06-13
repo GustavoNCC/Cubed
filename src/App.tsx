@@ -5,6 +5,7 @@ import { Servers } from "./pages/Servers";
 import { Settings } from "./pages/Settings";
 import { Console } from "./pages/Console";
 import { Backups } from "./pages/Backups";
+import { Mods } from "./pages/Mods";
 import { api } from "./api";
 import type { Server, CreateServerForm } from "./types";
 
@@ -14,6 +15,7 @@ function App() {
   const [error, setError]           = useState<string | null>(null);
   const [consoleServer, setConsole]  = useState<Server | null>(null);
   const [backupServer, setBackups]   = useState<Server | null>(null);
+  const [modsServer, setMods]        = useState<Server | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -58,7 +60,7 @@ function App() {
         )}
 
         {page === "dashboard" && <Dashboard servers={servers} />}
-        {page === "servers" && !consoleServer && !backupServer && (
+        {page === "servers" && !consoleServer && !backupServer && !modsServer && (
           <Servers
             servers={servers}
             onRefresh={refresh}
@@ -68,6 +70,7 @@ function App() {
             onCreate={handleCreate}
             onConsole={setConsole}
             onBackups={setBackups}
+            onMods={setMods}
           />
         )}
         {page === "servers" && consoleServer && (
@@ -75,6 +78,9 @@ function App() {
         )}
         {page === "servers" && backupServer && (
           <Backups server={backupServer} onBack={() => setBackups(null)} />
+        )}
+        {page === "servers" && modsServer && (
+          <Mods server={modsServer} onBack={() => setMods(null)} />
         )}
         {page === "settings" && <Settings />}
       </main>

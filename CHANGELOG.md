@@ -6,6 +6,35 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.12.0] — Fase 12: Mod Manager
+
+### Added
+- **Puerto `ModRepository`** (`cubed-application/src/ports/mod_repository.rs`):
+  - `save`, `find_by_id`, `find_by_server`, `delete`.
+- **Casos de uso** (`cubed-application/src/use_cases/`):
+  - `AddMod` — valida extensión `.jar`, verifica servidor y persiste el mod.
+  - `ListMods` — lista mods de un servidor ordenados por nombre.
+  - `RemoveMod` — elimina del repositorio y devuelve la ruta del archivo.
+- **`InMemoryModRepo`** (`cubed-infrastructure/src/mods/`) — repositorio en memoria para dev/tests.
+- **`FileModManager`** (`cubed-infrastructure/src/mods/`):
+  - `validate_jar` — verifica cabecera PK (`PK\x03\x04`) sin copiar el archivo.
+  - `install_mod` — valida, copia el .jar a `mods/` y registra en el repositorio.
+  - `list_mods` — lista ordenada por nombre desde el repositorio.
+  - `remove_mod` — borra el .jar del disco (best-effort) y lo elimina del repositorio.
+- **4 comandos Tauri nuevos** (`src-tauri/src/commands.rs`):
+  - `list_mods(server_id)` → `Vec<ModDto>`.
+  - `install_mod(server_id, source_path, mods_dir)` → `ModDto`.
+  - `remove_mod(mod_id)`.
+  - `validate_jar(path)` → `bool`.
+- **Frontend — `Mods.tsx`** (`src/pages/Mods.tsx`):
+  - Lista de mods instalados con nombre, ruta y botón Eliminar.
+  - Botón "Instalar mod" con selector de archivo (`.jar`) y validación previa.
+  - Mensajes de éxito/error diferenciados.
+  - Navegación desde cada `ServerCard` con botón "Mods".
+
+### Tests
+- 45 tests pasando (`cargo test`). Build frontend: ✓ (200 KB JS gzip: 62 KB).
+
 ## [0.11.0] — Fase 11: Backup Manager
 
 ### Added

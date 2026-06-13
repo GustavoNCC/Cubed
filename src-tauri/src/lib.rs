@@ -4,8 +4,8 @@ mod in_memory_repo;
 use std::sync::Arc;
 use commands::AppState;
 use cubed_infrastructure::{
-    FileBackupManager, InMemoryBackupRepo, LocalFileSystem,
-    MinecraftConsoleManager, SysInfoResourceMonitor,
+    FileBackupManager, FileModManager, InMemoryBackupRepo, InMemoryModRepo,
+    LocalFileSystem, MinecraftConsoleManager, SysInfoResourceMonitor,
 };
 
 #[tauri::command]
@@ -25,10 +25,12 @@ pub fn run() {
         repo.clone(),
         backup_repo.clone(),
     );
+    let mod_repo = InMemoryModRepo::new();
+    let mod_mgr  = FileModManager::new(repo.clone(), mod_repo.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(AppState { repo, fs, console, resources, backup_repo, backup_mgr })
+        .manage(AppState { repo, fs, console, resources, backup_repo, backup_mgr, mod_repo, mod_mgr })
         .invoke_handler(tauri::generate_handler![
             health_check,
             commands::list_servers,
@@ -45,6 +47,10 @@ pub fn run() {
             commands::list_backups,
             commands::restore_backup,
             commands::delete_backup,
+            commands::list_mods,
+            commands::install_mod,
+            commands::remove_mod,
+            commands::validate_jar,
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar la aplicación Cubed");
