@@ -8,6 +8,7 @@
 pub mod backup;
 pub mod console;
 pub mod mods;
+pub mod modpacks;
 pub mod downloader;
 pub mod fs;
 pub mod java;
@@ -18,6 +19,7 @@ pub mod resources;
 
 pub use backup::{FileBackupManager, InMemoryBackupRepo};
 pub use mods::{FileModManager, InMemoryModRepo};
+pub use modpacks::{InMemoryModpackRepo, InstallProgress, InstallSummary, ModpackInstaller};
 pub use console::MinecraftConsoleManager;
 pub use downloader::HttpDownloader;
 pub use fs::LocalFileSystem;

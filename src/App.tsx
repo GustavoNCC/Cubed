@@ -6,6 +6,7 @@ import { Settings } from "./pages/Settings";
 import { Console } from "./pages/Console";
 import { Backups } from "./pages/Backups";
 import { Mods } from "./pages/Mods";
+import { Modpacks } from "./pages/Modpacks";
 import { api } from "./api";
 import type { Server, CreateServerForm } from "./types";
 
@@ -16,6 +17,7 @@ function App() {
   const [consoleServer, setConsole]  = useState<Server | null>(null);
   const [backupServer, setBackups]   = useState<Server | null>(null);
   const [modsServer, setMods]        = useState<Server | null>(null);
+  const [modpackServer, setModpacks] = useState<Server | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -60,7 +62,7 @@ function App() {
         )}
 
         {page === "dashboard" && <Dashboard servers={servers} />}
-        {page === "servers" && !consoleServer && !backupServer && !modsServer && (
+        {page === "servers" && !consoleServer && !backupServer && !modsServer && !modpackServer && (
           <Servers
             servers={servers}
             onRefresh={refresh}
@@ -71,6 +73,7 @@ function App() {
             onConsole={setConsole}
             onBackups={setBackups}
             onMods={setMods}
+            onModpacks={setModpacks}
           />
         )}
         {page === "servers" && consoleServer && (
@@ -81,6 +84,9 @@ function App() {
         )}
         {page === "servers" && modsServer && (
           <Mods server={modsServer} onBack={() => setMods(null)} />
+        )}
+        {page === "servers" && modpackServer && (
+          <Modpacks server={modpackServer} onBack={() => setModpacks(null)} />
         )}
         {page === "settings" && <Settings />}
       </main>

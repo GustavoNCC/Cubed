@@ -6,6 +6,36 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.13.0] — Fase 13: Modpack Manager
+
+### Added
+- **Puerto `ModpackRepository`** (`cubed-application/src/ports/modpack_repository.rs`):
+  - `save`, `find_by_id`, `find_by_server`, `delete`.
+- **Caso de uso `ImportModpack`** (`cubed-application/src/use_cases/import_modpack.rs`):
+  - Detecta formato por extensión (`.mrpack` → Modrinth, `.zip` → CurseForge/genérico).
+  - 3 tests unitarios.
+- **`InMemoryModpackRepo`** (`cubed-infrastructure/src/modpacks/`) — repositorio en memoria.
+- **`ModpackInstaller`** (`cubed-infrastructure/src/modpacks/`):
+  - **`.mrpack`**: lee `modrinth.index.json` del ZIP, filtra archivos server-side, descarga cada uno desde sus mirrors con `reqwest`, extrae info de loaders (Fabric, Forge, etc.).
+  - **`.zip` CurseForge**: lee `manifest.json`, intenta descargar desde URLs directas (omite los que requieren API key).
+  - **`.zip` genérico**: extrae todos los `.jar` directamente al directorio `mods/`.
+  - Emite progreso `InstallProgress { total, done, current_file }` vía callback.
+  - 3 tests unitarios (path inválido, formato no soportado, .mrpack real).
+- **Dependencia `zip 2`** añadida a cubed-infrastructure.
+- **3 comandos Tauri nuevos** (`src-tauri/src/commands.rs`):
+  - `install_modpack(server_id, source_path, install_dir)` → `InstallSummaryDto` (emite eventos `modpack-progress:<id>`).
+  - `list_modpacks(server_id)` → `Vec<ModpackDto>`.
+  - `delete_modpack(modpack_id)`.
+- **Frontend — `Modpacks.tsx`** (`src/pages/Modpacks.tsx`):
+  - Instalación con barra de progreso en tiempo real (eventos Tauri).
+  - Resumen post-instalación: archivos descargados, omitidos, loader info.
+  - Lista de modpacks instalados con acción Eliminar.
+  - Soporta `.mrpack` y `.zip` vía selector de archivo.
+  - Botón "Modpacks" añadido a cada `ServerCard`.
+
+### Tests
+- 48 tests pasando (`cargo test`). Build frontend: ✓ (206 KB JS gzip: 63 KB).
+
 ## [0.12.0] — Fase 12: Mod Manager
 
 ### Added

@@ -14,9 +14,10 @@ interface Props {
   onConsole: (server: Server) => void;
   onBackups: (server: Server) => void;
   onMods: (server: Server) => void;
+  onModpacks: (server: Server) => void;
 }
 
-export function Servers({ servers, onRefresh: _onRefresh, onStart, onStop, onDelete, onCreate, onConsole, onBackups, onMods }: Props) {
+export function Servers({ servers, onRefresh: _onRefresh, onStart, onStop, onDelete, onCreate, onConsole, onBackups, onMods, onModpacks }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
@@ -54,6 +55,7 @@ export function Servers({ servers, onRefresh: _onRefresh, onStart, onStop, onDel
               onConsole={() => onConsole(s)}
               onBackups={() => onBackups(s)}
               onMods={() => onMods(s)}
+              onModpacks={() => onModpacks(s)}
             />
           ))}
         </div>

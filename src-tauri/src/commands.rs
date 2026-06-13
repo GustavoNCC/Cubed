@@ -5,9 +5,9 @@ use uuid::Uuid;
 
 use cubed_domain::entities::{ServerSoftware, ServerStatus};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
-use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModRepository, ResourceMonitor, ServerRepository};
+use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModpackRepository, ModRepository, ResourceMonitor, ServerRepository};
 use cubed_application::use_cases::{CreateBackup, CreateBackupInput, DeleteBackup, ListBackups, ListMods, RemoveMod};
-use cubed_infrastructure::{FileBackupManager, FileModManager, InMemoryBackupRepo, MinecraftConsoleManager, SysInfoResourceMonitor};
+use cubed_infrastructure::{FileBackupManager, FileModManager, InMemoryBackupRepo, MinecraftConsoleManager, ModpackInstaller, SysInfoResourceMonitor};
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -48,8 +48,10 @@ pub struct AppState {
     pub resources:   Arc<SysInfoResourceMonitor>,
     pub backup_repo: Arc<dyn BackupRepository>,
     pub backup_mgr:  Arc<FileBackupManager>,
-    pub mod_repo:    Arc<dyn ModRepository>,
-    pub mod_mgr:     Arc<FileModManager>,
+    pub mod_repo:      Arc<dyn ModRepository>,
+    pub mod_mgr:       Arc<FileModManager>,
+    pub modpack_repo:  Arc<dyn ModpackRepository>,
+    pub modpack_inst:  Arc<ModpackInstaller>,
 }
 
 // ── Server commands ──────────────────────────────────────────────────────────
@@ -399,4 +401,94 @@ pub async fn validate_jar(path: String) -> Result<bool, String> {
         Ok(()) => Ok(true),
         Err(_) => Ok(false),
     }
+}
+
+// ── Modpack commands ──────────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct ModpackDto {
+    pub id: String,
+    pub server_id: String,
+    pub name: String,
+    pub format: String,
+    pub source_path: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct InstallSummaryDto {
+    pub modpack: ModpackDto,
+    pub total_files: usize,
+    pub downloaded: usize,
+    pub skipped: usize,
+    pub loader_info: Option<String>,
+}
+
+fn modpack_to_dto(m: &cubed_domain::entities::Modpack) -> ModpackDto {
+    ModpackDto {
+        id: m.id().to_string(),
+        server_id: m.server_id().to_string(),
+        name: m.name().to_string(),
+        format: m.format().to_string(),
+        source_path: m.source_path().to_string(),
+    }
+}
+
+/// Instala un modpack (.mrpack o .zip) en el directorio del servidor.
+/// Las líneas de progreso se emiten como eventos Tauri "modpack-progress:<server_id>".
+#[tauri::command]
+pub async fn install_modpack(
+    server_id: String,
+    source_path: String,
+    install_dir: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<InstallSummaryDto, String> {
+    let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
+    let event_name = format!("modpack-progress:{}", server_id);
+    let app_clone = app.clone();
+    let event_clone = event_name.clone();
+
+    let (modpack, summary) = state.modpack_inst
+        .install(uuid, &source_path, &install_dir, move |progress| {
+            let _ = app_clone.emit(&event_clone, serde_json::json!({
+                "total": progress.total,
+                "done":  progress.done,
+                "file":  progress.current_file,
+            }));
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(InstallSummaryDto {
+        modpack: modpack_to_dto(&modpack),
+        total_files: summary.total_files,
+        downloaded: summary.downloaded,
+        skipped: summary.skipped,
+        loader_info: summary.loader_info,
+    })
+}
+
+/// Lista los modpacks importados para un servidor.
+#[tauri::command]
+pub async fn list_modpacks(
+    server_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ModpackDto>, String> {
+    let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
+    let mut list = state.modpack_repo
+        .find_by_server(uuid)
+        .await
+        .map_err(|e| e.to_string())?;
+    list.sort_by(|a, b| a.name().cmp(b.name()));
+    Ok(list.iter().map(modpack_to_dto).collect())
+}
+
+/// Elimina el registro de un modpack (no borra los mods ya instalados).
+#[tauri::command]
+pub async fn delete_modpack(
+    modpack_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let uuid = Uuid::parse_str(&modpack_id).map_err(|e| e.to_string())?;
+    state.modpack_repo.delete(uuid).await.map_err(|e| e.to_string())
 }

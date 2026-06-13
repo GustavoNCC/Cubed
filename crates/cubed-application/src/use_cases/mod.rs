@@ -1,5 +1,6 @@
 pub mod add_mod;
 pub mod create_backup;
+pub mod import_modpack;
 pub mod create_server;
 pub mod delete_backup;
 pub mod delete_server;
@@ -18,6 +19,7 @@ pub mod start_server;
 pub mod stop_server;
 
 pub use add_mod::{AddMod, AddModInput};
+pub use import_modpack::{ImportModpack, ImportModpackInput};
 pub use create_backup::{CreateBackup, CreateBackupInput};
 pub use create_server::{CreateServer, CreateServerInput};
 pub use delete_backup::DeleteBackup;

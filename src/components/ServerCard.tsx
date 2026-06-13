@@ -1,4 +1,4 @@
-import { Play, Square, Trash2, Terminal, Archive, Package } from "lucide-react";
+import { Play, Square, Trash2, Terminal, Archive, Package, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./StatusBadge";
 import type { Server } from "../types";
@@ -11,10 +11,11 @@ interface Props {
   onConsole: () => void;
   onBackups: () => void;
   onMods: () => void;
+  onModpacks: () => void;
   loading: boolean;
 }
 
-export function ServerCard({ server, onStart, onStop, onDelete, onConsole, onBackups, onMods, loading }: Props) {
+export function ServerCard({ server, onStart, onStop, onDelete, onConsole, onBackups, onMods, onModpacks, loading }: Props) {
   const canStart  = server.status === "offline" || server.status === "crashed";
   const canStop   = server.status === "running";
   const canDelete = server.status === "offline" || server.status === "crashed";
@@ -77,6 +78,13 @@ export function ServerCard({ server, onStart, onStop, onDelete, onConsole, onBac
           className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
         >
           <Package className="h-3 w-3" /> Mods
+        </button>
+
+        <button
+          onClick={onModpacks}
+          className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
+        >
+          <Layers className="h-3 w-3" /> Modpacks
         </button>
 
         <button
