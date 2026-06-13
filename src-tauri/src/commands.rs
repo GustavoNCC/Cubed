@@ -1,15 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, State};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use cubed_domain::entities::{ServerSoftware, ServerStatus};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
-use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModpackRepository, ModRepository, NetworkManager, ResourceMonitor, ServerRepository, TailscaleStatus};
+use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModpackRepository, ModRepository, NetworkManager, ProcessManager, ResourceMonitor, ServerRepository, TailscaleStatus};
 use cubed_application::use_cases::{DeleteBackup, ListBackups, ListMods};
 use cubed_application::CubedEvent;
-use cubed_infrastructure::{FileBackupManager, FileModManager, MinecraftConsoleManager, ModpackInstaller, SysInfoResourceMonitor, TailscaleNetworkManager, TcpPortManager};
+use cubed_infrastructure::{FileBackupManager, FileModManager, MinecraftConsoleManager, MinecraftProcessManager, ModpackInstaller, SysInfoResourceMonitor, TailscaleNetworkManager, TcpPortManager};
 use cubed_application::ports::PortManager;
 use crate::event_bus::EventBus;
 
@@ -49,6 +50,9 @@ pub struct AppState {
     pub repo:        Arc<dyn ServerRepository>,
     pub fs:          Arc<dyn FileSystemManager>,
     pub console:     Arc<MinecraftConsoleManager>,
+    pub process_mgr: Arc<MinecraftProcessManager>,
+    /// Directorio base donde se almacenan los servidores.
+    pub servers_dir: String,
     pub resources:   Arc<SysInfoResourceMonitor>,
     pub backup_repo: Arc<dyn BackupRepository>,
     pub backup_mgr:  Arc<FileBackupManager>,
@@ -98,15 +102,117 @@ pub async fn create_server(
 }
 
 #[tauri::command]
-pub async fn start_server(id: String, state: State<'_, AppState>) -> Result<ServerDto, String> {
+pub async fn start_server(
+    id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ServerDto, String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     let mut server = state.repo.find_by_id(uuid).await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
+
+    let work_dir  = format!("{}/{}", state.servers_dir, server.name());
+    let jar_path  = format!("{}/server.jar", work_dir);
+
+    // Reject early if JAR is missing
+    if !std::path::Path::new(&jar_path).exists() {
+        return Err(format!(
+            "JAR no encontrado en '{}'. Descarga el servidor primero.", jar_path
+        ));
+    }
+
+    // Domain transition → Starting
     server.start().map_err(|e| e.to_string())?;
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
-    state.event_bus.emit(CubedEvent::ServerStarted { server_id: uuid });
-    info!(server_id = %uuid, "server started");
+
+    // Spawn actual Java process
+    let (pid, stdin, stdout, stderr) = state.process_mgr
+        .spawn_with_io(uuid, server.java_path().as_str(), &jar_path, &work_dir, 2048)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    info!(server_id = %uuid, pid, "java process spawned");
+
+    // Register stdin so console commands can be sent
+    state.console.register_stdin(uuid, stdin).await;
+
+    // Build a callback that:
+    //   1. Forwards lines to the Tauri frontend
+    //   2. Detects the "Done" line → marks Running
+    //   3. Detects a crash / process end → marks Crashed
+    let event_name = format!("console-line:{}", id);
+    let app_cb    = app.clone();
+    let repo_cb   = state.repo.clone();
+    let eb_cb     = state.event_bus.clone();
+    let running   = Arc::new(AtomicBool::new(false));
+    let running2  = running.clone();
+
+    state.console.attach(uuid, Box::new(move |line: ConsoleLine| {
+        // Forward to frontend
+        let evt = ConsoleLineEvent {
+            server_id: line.server_id.to_string(),
+            is_stdout: line.is_stdout,
+            text: line.text.clone(),
+        };
+        app_cb.emit(&event_name, evt).ok();
+
+        // Detect "Done (X.XXXs)! For help, type "help"" from Minecraft
+        if line.is_stdout
+            && !running2.load(Ordering::Relaxed)
+            && line.text.contains("Done")
+            && line.text.contains("For help")
+        {
+            running2.store(true, Ordering::Relaxed);
+            let repo = repo_cb.clone();
+            let eb   = eb_cb.clone();
+            tokio::spawn(async move {
+                if let Ok(Some(mut srv)) = repo.find_by_id(uuid).await {
+                    if srv.mark_running().is_ok() {
+                        let _ = repo.save(&srv).await;
+                        eb.emit(CubedEvent::ServerStarted { server_id: uuid });
+                        info!(server_id = %uuid, "server is now Running");
+                    }
+                }
+            });
+        }
+    })).await.map_err(|e| e.to_string())?;
+
+    // Start reading stdout/stderr (lines go through the callback above)
+    state.console.spawn_readers(uuid, stdout, stderr).await;
+
+    // Background watcher: when the process dies, mark offline or crashed
+    let repo_w   = state.repo.clone();
+    let proc_w   = state.process_mgr.clone();
+    let eb_w     = state.event_bus.clone();
+    let console_w = state.console.clone();
+    let running_w = running.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            match proc_w.is_alive(uuid).await {
+                Ok(true) => continue,
+                _ => break,
+            }
+        }
+        // Process has exited
+        console_w.detach(uuid).await;
+        if let Ok(Some(mut srv)) = repo_w.find_by_id(uuid).await {
+            let was_stopping = *srv.status() == cubed_domain::entities::ServerStatus::Stopping;
+            let was_running  = running_w.load(Ordering::Relaxed);
+            if was_stopping || was_running {
+                // Clean shutdown path: Stopping → Offline
+                let _ = srv.mark_offline();
+            } else {
+                // Never reached Running → Crashed
+                srv.mark_crashed();
+            }
+            let _ = repo_w.save(&srv).await;
+            eb_w.emit(CubedEvent::ServerStopped { server_id: uuid });
+            info!(server_id = %uuid, "process exited, status updated");
+        }
+    });
+
     Ok(server_to_dto(&server))
 }
 
@@ -116,10 +222,19 @@ pub async fn stop_server(id: String, state: State<'_, AppState>) -> Result<Serve
     let mut server = state.repo.find_by_id(uuid).await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
+
+    // Transition domain state (Running → Stopping)
     server.stop().map_err(|e| e.to_string())?;
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
+
+    // Send "stop" command to the server process via stdin
+    if let Err(e) = state.console.send_command(uuid, "stop").await {
+        warn!(server_id = %uuid, err = %e, "could not send stop via stdin, killing process");
+        state.process_mgr.kill(uuid).await.ok();
+    }
+
     state.event_bus.emit(CubedEvent::ServerStopped { server_id: uuid });
-    info!(server_id = %uuid, "server stopped");
+    info!(server_id = %uuid, "server stop requested");
     Ok(server_to_dto(&server))
 }
 

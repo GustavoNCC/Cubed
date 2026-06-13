@@ -9,7 +9,7 @@ use tauri::Manager;
 use tracing_subscriber::EnvFilter;
 use cubed_infrastructure::{
     FileBackupManager, FileModManager, InMemoryBackupRepo, InMemoryModpackRepo,
-    InMemoryModRepo, LocalFileSystem, MinecraftConsoleManager,
+    InMemoryModRepo, LocalFileSystem, MinecraftConsoleManager, MinecraftProcessManager,
     ModpackInstaller, SysInfoResourceMonitor, TailscaleNetworkManager,
 };
 
@@ -25,9 +25,11 @@ pub fn run() {
             "cubed=debug".parse().expect("valid directive"),
         ))
         .init();
+    let servers_dir = "/tmp/cubed-dev/servers".to_string();
     let repo        = in_memory_repo::InMemoryServerRepo::new();
     let fs          = Arc::new(LocalFileSystem::new("/tmp/cubed-dev"));
     let console     = Arc::new(MinecraftConsoleManager::new());
+    let process_mgr = Arc::new(MinecraftProcessManager::new());
     let resources   = Arc::new(SysInfoResourceMonitor::new());
     let backup_repo = InMemoryBackupRepo::new();
     let backup_mgr  = FileBackupManager::new(
@@ -47,8 +49,8 @@ pub fn run() {
         .setup(move |app| {
             let event_bus = EventBus::new(app.handle().clone());
             app.manage(AppState {
-                repo, fs, console, resources,
-                backup_repo, backup_mgr,
+                repo, fs, console, process_mgr, servers_dir,
+                resources, backup_repo, backup_mgr,
                 mod_repo, mod_mgr,
                 modpack_repo, modpack_inst,
                 network,

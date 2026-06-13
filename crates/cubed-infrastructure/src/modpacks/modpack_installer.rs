@@ -218,22 +218,23 @@ impl ModpackInstaller {
             }
             Err(_) => {
                 // Fallback: extract all .jar files from the zip into mods/
-                let sp2 = source_path.to_string();
-                let md = mods_dir.clone();
-                let cb2 = progress_cb.clone();
-                tokio::task::spawn_blocking(move || extract_jars_from_zip(&sp2, &md, &*cb2))
-                    .await
-                    .map_err(|e| ApplicationError::Infrastructure(format!("spawn_blocking: {}", e)))??;
+                let sp2        = source_path.to_string();
+                let install_d  = install_dir.to_string();
+                let cb2        = progress_cb.clone();
+                let extracted  = tokio::task::spawn_blocking(move || {
+                    extract_server_zip(&sp2, &install_d, &*cb2)
+                })
+                .await
+                .map_err(|e| ApplicationError::Infrastructure(format!("spawn_blocking: {}", e)))??;
 
-                let count = count_jars(&mods_dir).await;
                 Ok(InstallSummary {
                     name: Path::new(source_path)
                         .file_stem()
                         .and_then(|s| s.to_str())
                         .unwrap_or("Modpack")
                         .to_string(),
-                    total_files: count,
-                    downloaded: count,
+                    total_files: extracted,
+                    downloaded: extracted,
                     skipped: 0,
                     loader_info: None,
                 })
@@ -291,11 +292,29 @@ fn read_cf_manifest(path: &str) -> ApplicationResult<CfManifest> {
     })
 }
 
-fn extract_jars_from_zip(
+/// Directorios de servidor que DEBEN extraerse.
+const INCLUDE_DIRS: &[&str] = &[
+    "mods/", "config/", "kubejs/", "defaultconfigs/",
+    "scripts/", "resources/", "openloader/", "patchouli_books/",
+];
+
+/// Prefijos que DEBEN ignorarse (mundo, logs, caché).
+const SKIP_PREFIXES: &[&str] = &[
+    "world/", "world_nether/", "world_the_end/", "DIM-1/", "DIM1/",
+    "logs/", "crash-reports/", ".git/", "local/", "journeymap/data/",
+];
+
+/// Extrae un ZIP de servidor/modpack de forma inteligente:
+/// - Si el ZIP tiene estructura de servidor (mods/, config/, etc.) extrae
+///   solo los directorios relevantes, omitiendo world/, logs/, etc.
+/// - Si no tiene estructura reconocible, extrae todos los .jar en mods/.
+///
+/// Devuelve el número de archivos extraídos.
+fn extract_server_zip(
     zip_path: &str,
-    dest_dir: &str,
+    install_dir: &str,
     progress_cb: &(dyn Fn(InstallProgress) + Send + Sync),
-) -> ApplicationResult<()> {
+) -> ApplicationResult<usize> {
     let file = std::fs::File::open(zip_path).map_err(|e| {
         ApplicationError::Infrastructure(format!("No se pudo abrir ZIP: {}", e))
     })?;
@@ -303,34 +322,79 @@ fn extract_jars_from_zip(
         ApplicationError::Infrastructure(format!("ZIP inválido: {}", e))
     })?;
 
+    // Detectar si el ZIP tiene estructura de servidor
+    let has_structure = (0..zip.len()).any(|i| {
+        zip.by_index_raw(i)
+            .map(|e| INCLUDE_DIRS.iter().any(|d| e.name().starts_with(d)))
+            .unwrap_or(false)
+    });
+
+    let mods_dir = format!("{}/mods", install_dir);
+    if !has_structure {
+        std::fs::create_dir_all(&mods_dir).map_err(|e| {
+            ApplicationError::Infrastructure(format!("No se pudo crear mods/: {}", e))
+        })?;
+    }
+
     let total = zip.len();
-    let mut done = 0;
+    let mut extracted = 0usize;
 
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).map_err(|e| {
             ApplicationError::Infrastructure(format!("Error leyendo entrada ZIP: {}", e))
         })?;
-        let name = entry.name().to_string();
-        if !name.ends_with(".jar") { continue; }
 
-        let file_name = Path::new(&name)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(&name)
-            .to_string();
+        let raw_name = entry.name().to_string();
 
-        progress_cb(InstallProgress { total, done, current_file: file_name.clone() });
+        let dest_path = if has_structure {
+            // Skip unwanted prefixes
+            if SKIP_PREFIXES.iter().any(|p| raw_name.starts_with(p)) {
+                continue;
+            }
+            // Only include wanted directories or root-level files (server.jar, *.properties…)
+            let in_wanted  = INCLUDE_DIRS.iter().any(|p| raw_name.starts_with(p));
+            let is_root    = !raw_name.contains('/') && !raw_name.ends_with('/');
+            if !in_wanted && !is_root {
+                continue;
+            }
+            std::path::PathBuf::from(install_dir).join(&raw_name)
+        } else {
+            // Flat mode: only .jar files → mods/
+            if !raw_name.ends_with(".jar") { continue; }
+            let file_name = Path::new(&raw_name)
+                .file_name().and_then(|n| n.to_str()).unwrap_or(&raw_name);
+            std::path::PathBuf::from(&mods_dir).join(file_name)
+        };
 
-        let dest = format!("{}/{}", dest_dir, file_name);
-        let mut out = std::fs::File::create(&dest).map_err(|e| {
-            ApplicationError::Infrastructure(format!("Error creando '{}': {}", dest, e))
+        if entry.is_dir() {
+            std::fs::create_dir_all(&dest_path).ok();
+            continue;
+        }
+
+        if let Some(parent) = dest_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ApplicationError::Infrastructure(format!("Error creando directorio: {}", e))
+            })?;
+        }
+
+        let display_name = dest_path.file_name()
+            .and_then(|n| n.to_str()).unwrap_or(&raw_name);
+        progress_cb(InstallProgress {
+            total,
+            done: extracted,
+            current_file: display_name.to_string(),
+        });
+
+        let mut out = std::fs::File::create(&dest_path).map_err(|e| {
+            ApplicationError::Infrastructure(format!("Error creando '{}': {}", dest_path.display(), e))
         })?;
         std::io::copy(&mut entry, &mut out).map_err(|e| {
-            ApplicationError::Infrastructure(format!("Error extrayendo '{}': {}", file_name, e))
+            ApplicationError::Infrastructure(format!("Error extrayendo '{}': {}", display_name, e))
         })?;
-        done += 1;
+        extracted += 1;
     }
-    Ok(())
+
+    Ok(extracted)
 }
 
 async fn download_file(client: &reqwest::Client, url: &str, dir: &str, file_name: &str) -> ApplicationResult<()> {
@@ -351,17 +415,6 @@ async fn download_file(client: &reqwest::Client, url: &str, dir: &str, file_name
     })
 }
 
-async fn count_jars(dir: &str) -> usize {
-    let mut count = 0usize;
-    if let Ok(mut rd) = fs::read_dir(dir).await {
-        while let Ok(Some(entry)) = rd.next_entry().await {
-            if entry.file_name().to_string_lossy().ends_with(".jar") {
-                count += 1;
-            }
-        }
-    }
-    count
-}
 
 #[cfg(test)]
 mod tests {

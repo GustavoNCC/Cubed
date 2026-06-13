@@ -6,6 +6,27 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.3] — Estabilización v1.0 (BUG #6 + BUG #7)
+
+### Fixed
+- **BUG #6 — Extracción inteligente de ZIPs de servidor** (`crates/cubed-infrastructure/src/modpacks/modpack_installer.rs`):
+  - Sustituye `extract_jars_from_zip` por `extract_server_zip` que detecta la estructura del ZIP.
+  - Si el ZIP contiene directorios `mods/`, `config/`, `kubejs/`, etc. (servidor completo), extrae solo los directorios de importancia (`mods/`, `config/`, `kubejs/`, `defaultconfigs/`, `scripts/`, `resources/`, `openloader/`, `patchouli_books/`) y archivos raíz (`server.jar`, `*.properties`).
+  - Omite directorios no deseados: `world/`, `world_nether/`, `world_the_end/`, `logs/`, `crash-reports/`, `.git/`, `local/`, `journeymap/data/`.
+  - Si el ZIP es una colección plana de JARs (sin estructura), extrae solo los `.jar` a `mods/` (comportamiento anterior).
+- **BUG #7 — Servidor nunca transitaba de "Iniciando" a "Running"** (múltiples archivos):
+  - `MinecraftConsoleManager` (`minecraft_console_manager.rs`): reescrito para almacenar callbacks suscritos en tiempo real (`subscribers: Vec<ConsoleCallback>` por servidor). `attach()` guarda el callback y lo entrega en tiempo real desde `spawn_readers()`. Se añade `detach()` para limpieza al terminar el proceso.
+  - `MinecraftProcessManager` (`minecraft_process_manager.rs`): nuevo método `spawn_with_io()` que devuelve `(pid, stdin, stdout, stderr)` antes de almacenar el proceso, para que el caller pueda registrarlos en el ConsoleManager.
+  - `commands.rs`: `start_server` ahora:
+    1. Verifica que `{servers_dir}/{name}/server.jar` existe.
+    2. Llama a `spawn_with_io()` para arrancar el proceso Java real.
+    3. Registra stdin con el ConsoleManager para enviar comandos.
+    4. Instala un callback que reenvía líneas al frontend Tauri Y detecta la línea "Done … For help" de Minecraft para llamar `mark_running()`.
+    5. Inicia `spawn_readers()` para leer stdout/stderr.
+    6. Lanza una tarea de fondo que monitoriza la salida del proceso: si el proceso muere limpiamente (Stopping) → `mark_offline`; si murió antes de llegar a Running → `mark_crashed`.
+  - `commands.rs`: `stop_server` ahora envía el comando `stop` al stdin del proceso vía ConsoleManager; si falla, hace `kill`.
+  - `lib.rs`: `MinecraftProcessManager` se crea y se pasa en `AppState` junto con `servers_dir`.
+
 ## [1.0.2] — Estabilización v1.0 (BUG #4 + BUG #5)
 
 ### Fixed

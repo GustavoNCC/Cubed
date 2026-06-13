@@ -15,6 +15,8 @@ const BUFFER_LINES: usize = 500;
 struct ConsoleState {
     stdin: Option<ChildStdin>,
     buffer: VecDeque<ConsoleLine>,
+    /// Real-time subscribers. Each entry receives every line as it arrives.
+    callbacks: Vec<ConsoleCallback>,
 }
 
 pub struct MinecraftConsoleManager {
@@ -26,36 +28,44 @@ impl MinecraftConsoleManager {
         Self { state: Arc::new(Mutex::new(HashMap::new())) }
     }
 
-    /// Registra el stdin de un proceso recién iniciado.
-    /// Debe llamarse desde el `ProcessManager` inmediatamente después de `spawn`.
-    pub async fn register_stdin(&self, server_id: Uuid, stdin: ChildStdin) {
-        let mut map = self.state.lock().await;
+    fn ensure_slot(map: &mut HashMap<Uuid, ConsoleState>, server_id: Uuid) {
         map.entry(server_id).or_insert_with(|| ConsoleState {
             stdin: None,
             buffer: VecDeque::new(),
-        }).stdin = Some(stdin);
+            callbacks: Vec::new(),
+        });
     }
 
-    /// Lanza las tareas de lectura de stdout y stderr.
-    /// El callback es el puente hacia Tauri events o cualquier otro destino.
+    /// Registra el stdin de un proceso recién iniciado.
+    pub async fn register_stdin(&self, server_id: Uuid, stdin: ChildStdin) {
+        let mut map = self.state.lock().await;
+        Self::ensure_slot(&mut map, server_id);
+        map.get_mut(&server_id).unwrap().stdin = Some(stdin);
+    }
+
+    /// Lanza lectores de stdout y stderr. Cada línea se entrega a todos
+    /// los callbacks suscritos y se almacena en el buffer circular.
     pub async fn spawn_readers(
         &self,
         server_id: Uuid,
         stdout: ChildStdout,
         stderr: ChildStderr,
-        callback: Arc<ConsoleCallback>,
     ) {
         let state_out = self.state.clone();
-        let cb_out = callback.clone();
+        let state_err = self.state.clone();
 
         // stdout reader
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                let entry = ConsoleLine { server_id, is_stdout: true, text: line.clone() };
-                cb_out(entry.clone());
+                let entry = ConsoleLine { server_id, is_stdout: true, text: line };
                 let mut map = state_out.lock().await;
                 if let Some(cs) = map.get_mut(&server_id) {
+                    // deliver to all subscribers
+                    for cb in &cs.callbacks {
+                        cb(entry.clone());
+                    }
+                    // store in ring buffer
                     cs.buffer.push_back(entry);
                     if cs.buffer.len() > BUFFER_LINES {
                         cs.buffer.pop_front();
@@ -63,18 +73,17 @@ impl MinecraftConsoleManager {
                 }
             }
         });
-
-        let state_err = self.state.clone();
-        let cb_err = callback;
 
         // stderr reader
         tokio::spawn(async move {
             let mut reader = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                let entry = ConsoleLine { server_id, is_stdout: false, text: line.clone() };
-                cb_err(entry.clone());
+                let entry = ConsoleLine { server_id, is_stdout: false, text: line };
                 let mut map = state_err.lock().await;
                 if let Some(cs) = map.get_mut(&server_id) {
+                    for cb in &cs.callbacks {
+                        cb(entry.clone());
+                    }
                     cs.buffer.push_back(entry);
                     if cs.buffer.len() > BUFFER_LINES {
                         cs.buffer.pop_front();
@@ -82,6 +91,15 @@ impl MinecraftConsoleManager {
                 }
             }
         });
+    }
+
+    /// Elimina todos los callbacks y el stdin de un servidor (proceso terminó).
+    pub async fn detach(&self, server_id: Uuid) {
+        let mut map = self.state.lock().await;
+        if let Some(cs) = map.get_mut(&server_id) {
+            cs.stdin = None;
+            cs.callbacks.clear();
+        }
     }
 }
 
@@ -91,29 +109,22 @@ impl Default for MinecraftConsoleManager {
 
 #[async_trait]
 impl ConsoleManager for MinecraftConsoleManager {
+    /// Suscribe un callback a líneas en tiempo real. También reproduce el buffer
+    /// histórico inmediatamente para que el suscriptor no pierda el pasado.
     async fn attach(
         &self,
         server_id: Uuid,
         callback: ConsoleCallback,
     ) -> ApplicationResult<()> {
-        // Ensure slot exists
         let mut map = self.state.lock().await;
-        map.entry(server_id).or_insert_with(|| ConsoleState {
-            stdin: None,
-            buffer: VecDeque::new(),
-        });
-        drop(map);
-
-        // The actual stdout/stderr readers are spawned via spawn_readers(),
-        // called by the composition root after process spawn. Here we just
-        // replay the existing buffer to the new callback so late subscribers
-        // get history.
-        let map = self.state.lock().await;
-        if let Some(cs) = map.get(&server_id) {
-            for line in &cs.buffer {
-                callback(line.clone());
-            }
+        Self::ensure_slot(&mut map, server_id);
+        let cs = map.get_mut(&server_id).unwrap();
+        // replay buffer to this subscriber
+        for line in &cs.buffer {
+            callback(line.clone());
         }
+        // keep for future real-time delivery
+        cs.callbacks.push(callback);
         Ok(())
     }
 
@@ -172,12 +183,12 @@ mod tests {
         let mgr = MinecraftConsoleManager::new();
         let id = Uuid::new_v4();
 
-        // Fill buffer via attach callback replay (simulate reader inserting directly)
         {
             let mut map = mgr.state.lock().await;
             let cs = map.entry(id).or_insert_with(|| ConsoleState {
                 stdin: None,
                 buffer: VecDeque::new(),
+                callbacks: Vec::new(),
             });
             for i in 0..(BUFFER_LINES + 10) {
                 cs.buffer.push_back(ConsoleLine {
@@ -193,27 +204,24 @@ mod tests {
 
         let tail = mgr.tail(id, BUFFER_LINES + 100);
         assert_eq!(tail.len(), BUFFER_LINES);
-        // Last inserted line is the last in tail
         assert_eq!(tail.last().unwrap().text, format!("line {}", BUFFER_LINES + 9));
     }
 
     #[tokio::test]
-    async fn attach_replays_buffer_to_callback() {
+    async fn attach_replays_buffer_and_delivers_future_lines() {
         let mgr = MinecraftConsoleManager::new();
         let id = Uuid::new_v4();
 
+        // Pre-fill buffer
         {
             let mut map = mgr.state.lock().await;
             let cs = map.entry(id).or_insert_with(|| ConsoleState {
                 stdin: None,
                 buffer: VecDeque::new(),
+                callbacks: Vec::new(),
             });
-            for i in 0..5 {
-                cs.buffer.push_back(ConsoleLine {
-                    server_id: id,
-                    is_stdout: true,
-                    text: format!("msg {}", i),
-                });
+            for i in 0..3 {
+                cs.buffer.push_back(ConsoleLine { server_id: id, is_stdout: true, text: format!("msg {}", i) });
             }
         }
 
@@ -223,6 +231,19 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(counter.load(Ordering::SeqCst), 5);
+        // 3 replayed lines
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+
+        // Simulate a new line arriving
+        {
+            let mut map = mgr.state.lock().await;
+            if let Some(cs) = map.get_mut(&id) {
+                let entry = ConsoleLine { server_id: id, is_stdout: true, text: "new".into() };
+                for cb in &cs.callbacks { cb(entry.clone()); }
+            }
+        }
+
+        // Should now be 4
+        assert_eq!(counter.load(Ordering::SeqCst), 4);
     }
 }

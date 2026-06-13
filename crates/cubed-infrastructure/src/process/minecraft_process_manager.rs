@@ -25,6 +25,56 @@ impl MinecraftProcessManager {
             processes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
+
+    /// Lanza el proceso y devuelve (pid, stdin, stdout, stderr) para que el
+    /// caller pueda registrarlos con el ConsoleManager antes de que se pierda
+    /// cualquier output. El proceso se almacena internamente igual que con
+    /// `spawn()`.
+    pub async fn spawn_with_io(
+        &self,
+        server_id: Uuid,
+        java_path: &str,
+        jar_path: &str,
+        work_dir: &str,
+        memory_mb: u32,
+    ) -> ApplicationResult<(
+        u32,
+        tokio::process::ChildStdin,
+        tokio::process::ChildStdout,
+        tokio::process::ChildStderr,
+    )> {
+        let mut child = Command::new(java_path)
+            .arg(format!("-Xms{}M", memory_mb / 2))
+            .arg(format!("-Xmx{}M", memory_mb))
+            .arg("-jar")
+            .arg(jar_path)
+            .arg("--nogui")
+            .current_dir(work_dir)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| ApplicationError::Infrastructure(
+                format!("No se pudo iniciar el proceso Java: {}", e),
+            ))?;
+
+        let pid = child.id().ok_or_else(|| {
+            ApplicationError::Infrastructure("No se pudo obtener el PID del proceso".into())
+        })?;
+
+        let stdin  = child.stdin.take().ok_or_else(|| {
+            ApplicationError::Infrastructure("No se pudo capturar stdin".into())
+        })?;
+        let stdout = child.stdout.take().ok_or_else(|| {
+            ApplicationError::Infrastructure("No se pudo capturar stdout".into())
+        })?;
+        let stderr = child.stderr.take().ok_or_else(|| {
+            ApplicationError::Infrastructure("No se pudo capturar stderr".into())
+        })?;
+
+        self.processes.lock().await.insert(server_id, ManagedProcess { pid, child });
+        Ok((pid, stdin, stdout, stderr))
+    }
 }
 
 impl Default for MinecraftProcessManager {
