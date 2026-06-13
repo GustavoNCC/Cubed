@@ -1,0 +1,27 @@
+[package]
+name = "cubed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Plataforma local de administración de servidores Minecraft para Ubuntu Linux"
+
+# The library is what Tauri's mobile entrypoint links against; the binary
+# simply calls into it. This keeps the composition root testable.
+[lib]
+name = "cubed_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Clean Architecture layers — src-tauri is the composition root that wires
+# domain + application + infrastructure together.
+cubed-domain = { workspace = true }
+cubed-application = { workspace = true }
+cubed-infrastructure = { workspace = true }
+
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }

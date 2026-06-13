@@ -1,0 +1,4 @@
+# Cubed Clippy configuration
+# Fail the build if cognitive complexity is too high.
+cognitive-complexity-threshold = 25
+too-many-arguments-threshold = 8

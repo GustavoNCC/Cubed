@@ -1,0 +1,15 @@
+[package]
+name = "cubed-application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cubed-domain = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

@@ -1,0 +1,23 @@
+use std::sync::Arc;
+use uuid::Uuid;
+use crate::error::{ApplicationError, ApplicationResult};
+use crate::ports::ServerRepository;
+
+pub struct StopServer {
+    repo: Arc<dyn ServerRepository>,
+}
+
+impl StopServer {
+    pub fn new(repo: Arc<dyn ServerRepository>) -> Self {
+        Self { repo }
+    }
+
+    pub async fn execute(&self, server_id: Uuid) -> ApplicationResult<()> {
+        let mut server = self.repo.find_by_id(server_id).await?.ok_or_else(|| {
+            ApplicationError::Infrastructure(format!("Servidor {} no encontrado", server_id))
+        })?;
+
+        server.stop()?;
+        self.repo.save(&server).await
+    }
+}

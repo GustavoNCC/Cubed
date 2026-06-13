@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = [
+    "src-tauri",
+    "crates/cubed-domain",
+    "crates/cubed-application",
+    "crates/cubed-infrastructure",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+authors = ["Cubed Team"]
+repository = "https://github.com/your-org/cubed"
+
+[workspace.dependencies]
+# Internal crates (Clean Architecture layers)
+cubed-domain = { path = "crates/cubed-domain" }
+cubed-application = { path = "crates/cubed-application" }
+cubed-infrastructure = { path = "crates/cubed-infrastructure" }
+
+# Shared external dependencies
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+async-trait = "0.1"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
