@@ -6,8 +6,11 @@
 //! infraestructura debe implementar. Depende SOLO de la capa de dominio.
 
 pub mod error;
+pub mod events;
 pub mod ports;
 pub mod use_cases;
+
+pub use events::CubedEvent;
 
 #[cfg(test)]
 mod tests {

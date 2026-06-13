@@ -9,6 +9,7 @@ import { Mods } from "./pages/Mods";
 import { Modpacks } from "./pages/Modpacks";
 import { api } from "./api";
 import type { Server, CreateServerForm } from "./types";
+import { useAppEvents } from "./hooks/useAppEvents";
 
 function App() {
   const [page, setPage]             = useState<Page>("dashboard");
@@ -29,6 +30,12 @@ function App() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useAppEvents({
+    onServerStarted: refresh,
+    onServerStopped: refresh,
+    onServerCrashed: refresh,
+  });
 
   async function handleCreate(form: CreateServerForm) {
     const server = await api.createServer(form);

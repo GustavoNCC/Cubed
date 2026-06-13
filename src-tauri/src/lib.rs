@@ -1,8 +1,11 @@
 mod commands;
+mod event_bus;
 mod in_memory_repo;
 
 use std::sync::Arc;
 use commands::AppState;
+use event_bus::EventBus;
+use tauri::Manager;
 use cubed_infrastructure::{
     FileBackupManager, FileModManager, InMemoryBackupRepo, InMemoryModpackRepo,
     InMemoryModRepo, LocalFileSystem, MinecraftConsoleManager,
@@ -34,12 +37,17 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(AppState {
-            repo, fs, console, resources,
-            backup_repo, backup_mgr,
-            mod_repo, mod_mgr,
-            modpack_repo, modpack_inst,
-            network,
+        .setup(move |app| {
+            let event_bus = EventBus::new(app.handle().clone());
+            app.manage(AppState {
+                repo, fs, console, resources,
+                backup_repo, backup_mgr,
+                mod_repo, mod_mgr,
+                modpack_repo, modpack_inst,
+                network,
+                event_bus,
+            });
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             health_check,

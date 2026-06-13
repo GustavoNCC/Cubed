@@ -6,6 +6,25 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.15.0] — Fase 15: Sistema de Eventos
+
+### Added
+- **`CubedEvent`** (`cubed-application/src/events.rs`):
+  - Enum con variantes: `ServerStarted`, `ServerStopped`, `ServerCrashed`, `BackupCreated`, `ResourceUpdated`, `TailscaleUpdated`, `ConsoleLine`.
+  - Método `channel()` que devuelve el nombre del evento Tauri correspondiente (`cubed://…`).
+- **`EventBus`** (`src-tauri/src/event_bus.rs`):
+  - Envuelve `AppHandle`; método `emit(CubedEvent)` traduce el evento al canal Tauri.
+  - Creado en `.setup()` con `app.handle().clone()` para acceso al `AppHandle` real.
+- **Eventos emitidos desde comandos Tauri** (`src-tauri/src/commands.rs`):
+  - `start_server` → `ServerStarted { server_id }`
+  - `stop_server`  → `ServerStopped { server_id }`
+  - `create_backup` → `BackupCreated { server_id, backup_id }`
+- **`useAppEvents`** (`src/hooks/useAppEvents.ts`):
+  - Hook React que se suscribe a los canales `cubed://server.started`, `cubed://server.stopped`, `cubed://server.crashed`, `cubed://backup.created`, `cubed://resource.updated`, `cubed://tailscale.updated`.
+  - Limpieza automática de listeners al desmontar el componente.
+- **`App.tsx`** integra `useAppEvents`:
+  - Llama a `refresh()` automáticamente al recibir `ServerStarted`, `ServerStopped` o `ServerCrashed`, eliminando la necesidad de polling manual del estado de los servidores.
+
 ## [0.14.0] — Fase 14: Network Manager (Tailscale)
 
 ### Added

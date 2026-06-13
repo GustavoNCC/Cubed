@@ -7,7 +7,9 @@ use cubed_domain::entities::{ServerSoftware, ServerStatus};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
 use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModpackRepository, ModRepository, NetworkManager, ResourceMonitor, ServerRepository, TailscaleStatus};
 use cubed_application::use_cases::{CreateBackup, CreateBackupInput, DeleteBackup, ListBackups, ListMods, RemoveMod};
+use cubed_application::CubedEvent;
 use cubed_infrastructure::{FileBackupManager, FileModManager, InMemoryBackupRepo, MinecraftConsoleManager, ModpackInstaller, SysInfoResourceMonitor, TailscaleNetworkManager};
+use crate::event_bus::EventBus;
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -53,6 +55,7 @@ pub struct AppState {
     pub modpack_repo:  Arc<dyn ModpackRepository>,
     pub modpack_inst:  Arc<ModpackInstaller>,
     pub network:       Arc<TailscaleNetworkManager>,
+    pub event_bus:     Arc<EventBus>,
 }
 
 // ── Server commands ──────────────────────────────────────────────────────────
@@ -90,6 +93,7 @@ pub async fn start_server(id: String, state: State<'_, AppState>) -> Result<Serv
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
     server.start().map_err(|e| e.to_string())?;
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
+    state.event_bus.emit(CubedEvent::ServerStarted { server_id: uuid });
     Ok(server_to_dto(&server))
 }
 
@@ -101,6 +105,7 @@ pub async fn stop_server(id: String, state: State<'_, AppState>) -> Result<Serve
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
     server.stop().map_err(|e| e.to_string())?;
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
+    state.event_bus.emit(CubedEvent::ServerStopped { server_id: uuid });
     Ok(server_to_dto(&server))
 }
 
@@ -293,6 +298,7 @@ pub async fn create_backup(
         .backup_server(uuid, &server_name, &server_dir)
         .await
         .map_err(|e| e.to_string())?;
+    state.event_bus.emit(CubedEvent::BackupCreated { server_id: uuid, backup_id: backup.id() });
     Ok(backup_to_dto(&backup))
 }
 
