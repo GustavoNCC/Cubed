@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-deb:
+    name: Build .deb (Ubuntu)
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar dependencias de sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev
+
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias frontend
+        run: npm ci
+
+      - name: Build Tauri (.deb)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Cubed ${{ github.ref_name }}"
+          releaseBody: |
+            ## Cubed ${{ github.ref_name }}
+
+            Plataforma local de administración de servidores Minecraft para Ubuntu Linux.
+
+            ### Instalación
+            1. Descarga el archivo `.deb`
+            2. Instala con:
+            ```bash
+            sudo dpkg -i cubed_*.deb
+            ```
+            3. Abre Cubed desde el menú de aplicaciones o ejecuta `cubed` en la terminal.
+
+            ### Requisitos
+            - Ubuntu 22.04 o superior
+            - Java 17 o superior (para ejecutar servidores Minecraft)
+          releaseDraft: false
+          prerelease: false
