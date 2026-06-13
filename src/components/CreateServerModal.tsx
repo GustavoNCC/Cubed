@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { X, RefreshCw, HelpCircle } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, RefreshCw, HelpCircle, Cpu, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "../api";
-import type { CreateServerForm } from "../types";
+import type { CreateServerForm, JavaInstallationDto } from "../types";
 
 const SOFTWARE_OPTIONS = [
   {
@@ -10,7 +10,7 @@ const SOFTWARE_OPTIONS = [
     label: "Paper",
     description: "El más popular. Alto rendimiento, compatible con plugins Bukkit/Spigot.",
     badge: "Recomendado",
-    badgeClass: "bg-green-500/20 text-green-400",
+    badgeClass: "bg-primary/20 text-primary",
     mods: false,
   },
   {
@@ -62,21 +62,27 @@ const DEFAULTS: CreateServerForm = {
 };
 
 export function CreateServerModal({ onClose, onCreate }: Props) {
-  const [form, setForm] = useState<CreateServerForm>(DEFAULTS);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [form, setForm]             = useState<CreateServerForm>(DEFAULTS);
+  const [error, setError]           = useState<string | null>(null);
+  const [loading, setLoading]       = useState(false);
   const [portLoading, setPortLoading] = useState(false);
   const [portSuggested, setPortSuggested] = useState(false);
-
-  function set<K extends keyof CreateServerForm>(key: K, value: CreateServerForm[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
+  const [javaList, setJavaList]     = useState<JavaInstallationDto[]>([]);
+  const [javaLoading, setJavaLoading] = useState(false);
+  const [javaAutoSet, setJavaAutoSet] = useState(false);
+  const [showJavaPicker, setShowJavaPicker] = useState(false);
+  const versionDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-suggest port on mount
   useEffect(() => {
     suggestPort();
+    detectJava(DEFAULTS.version);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function set<K extends keyof CreateServerForm>(key: K, value: CreateServerForm[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
 
   async function suggestPort() {
     setPortLoading(true);
@@ -89,6 +95,36 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
     } finally {
       setPortLoading(false);
     }
+  }
+
+  // Detect Java and auto-select best match for the given MC version
+  async function detectJava(mcVersion: string) {
+    setJavaLoading(true);
+    setJavaAutoSet(false);
+    try {
+      const [list, best] = await Promise.all([
+        api.detectJava(),
+        api.selectJavaForVersion(mcVersion).catch(() => null),
+      ]);
+      setJavaList(list);
+      if (best) {
+        setForm((f) => ({ ...f, java_path: best.path }));
+        setJavaAutoSet(true);
+      }
+    } catch {
+      // ignore — user can set manually
+    } finally {
+      setJavaLoading(false);
+    }
+  }
+
+  function handleVersionChange(v: string) {
+    set("version", v);
+    setJavaAutoSet(false);
+    if (versionDebounce.current) clearTimeout(versionDebounce.current);
+    versionDebounce.current = setTimeout(() => {
+      if (v.match(/^\d+\.\d+/)) detectJava(v);
+    }, 500);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -109,10 +145,10 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-xl border bg-card shadow-xl flex flex-col gap-0 overflow-hidden">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl shadow-primary/10 flex flex-col overflow-hidden neon-border">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-base font-semibold">Nuevo servidor</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
+          <h2 className="text-base font-semibold text-foreground">Nuevo servidor</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-4 w-4" />
           </button>
@@ -137,7 +173,7 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
               <input
                 required
                 value={form.version}
-                onChange={(e) => set("version", e.target.value)}
+                onChange={(e) => handleVersionChange(e.target.value)}
                 placeholder="1.21.4"
                 className="input"
               />
@@ -152,20 +188,20 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
                   max={65535}
                   value={form.port}
                   onChange={(e) => { set("port", Number(e.target.value)); setPortSuggested(false); }}
-                  className={cn("input flex-1 min-w-0", portSuggested && "border-green-500/50")}
+                  className={cn("input flex-1 min-w-0", portSuggested && "border-primary/50")}
                 />
                 <button
                   type="button"
                   onClick={suggestPort}
                   disabled={portLoading}
                   title="Buscar puerto libre"
-                  className="flex items-center justify-center w-9 rounded-md border bg-muted hover:bg-muted/80 transition-colors disabled:opacity-40"
+                  className="flex items-center justify-center w-9 rounded-md border border-border bg-muted hover:bg-muted/80 transition-colors disabled:opacity-40"
                 >
                   <RefreshCw className={cn("h-3.5 w-3.5 text-muted-foreground", portLoading && "animate-spin")} />
                 </button>
               </div>
               {portSuggested && (
-                <p className="text-xs text-green-500 mt-0.5">Puerto libre detectado automáticamente</p>
+                <p className="text-xs text-primary mt-0.5">Puerto libre detectado</p>
               )}
             </Field>
           </div>
@@ -179,7 +215,7 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
                   className={cn(
                     "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
                     form.software === opt.value
-                      ? "border-primary bg-primary/5"
+                      ? "border-primary/50 bg-primary/5 neon-border"
                       : "border-border hover:border-muted-foreground/50 hover:bg-muted/30"
                   )}
                 >
@@ -205,23 +241,88 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
             </div>
           </Field>
 
+          {/* Java — auto-detected */}
+          <Field label="Java">
+            <div className="flex gap-1.5 items-start flex-col">
+              <div className="relative w-full">
+                <div className="flex gap-1.5">
+                  <div className="relative flex-1">
+                    <input
+                      required
+                      value={form.java_path}
+                      onChange={(e) => { set("java_path", e.target.value); setJavaAutoSet(false); }}
+                      placeholder="/usr/bin/java"
+                      className={cn(
+                        "input font-mono text-xs pr-8",
+                        javaAutoSet && "border-primary/50"
+                      )}
+                    />
+                    {javaLoading && (
+                      <RefreshCw className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground animate-spin" />
+                    )}
+                  </div>
+                  {javaList.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowJavaPicker((v) => !v)}
+                      title="Seleccionar Java instalado"
+                      className="flex items-center justify-center w-9 rounded-md border border-border bg-muted hover:bg-muted/80 transition-colors"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Java picker dropdown */}
+                {showJavaPicker && javaList.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-10 rounded-md border border-border bg-card shadow-lg shadow-black/40 overflow-hidden">
+                    {javaList.map((j) => (
+                      <button
+                        key={j.path}
+                        type="button"
+                        onClick={() => {
+                          set("java_path", j.path);
+                          setJavaAutoSet(true);
+                          setShowJavaPicker(false);
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted transition-colors",
+                          form.java_path === j.path && "bg-primary/10"
+                        )}
+                      >
+                        <Cpu className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-mono truncate">{j.path}</p>
+                          <p className="text-[10px] text-muted-foreground">Java {j.major_version}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {javaAutoSet && !javaLoading && (
+                <p className="text-xs text-primary flex items-center gap-1">
+                  <Cpu className="h-3 w-3" />
+                  Java detectado automáticamente para Minecraft {form.version}
+                </p>
+              )}
+              {!javaLoading && javaList.length === 0 && (
+                <p className="text-xs text-amber-400">
+                  No se encontró Java. Instala OpenJDK: <code>sudo apt install openjdk-21-jdk</code>
+                </p>
+              )}
+            </div>
+          </Field>
+
           {/* Avanzado */}
           <details className="group">
             <summary className="text-xs text-muted-foreground cursor-pointer select-none flex items-center gap-1 hover:text-foreground transition-colors list-none">
               <HelpCircle className="h-3.5 w-3.5" />
-              Configuración avanzada
+              Directorio de servidores
             </summary>
-            <div className="flex flex-col gap-3 mt-3">
-              <Field label="Ruta de Java">
-                <input
-                  required
-                  value={form.java_path}
-                  onChange={(e) => set("java_path", e.target.value)}
-                  placeholder="/usr/bin/java"
-                  className="input font-mono text-xs"
-                />
-              </Field>
-              <Field label="Directorio de servidores">
+            <div className="mt-3">
+              <Field label="Directorio">
                 <input
                   required
                   value={form.servers_dir}
@@ -232,9 +333,9 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
             </div>
           </details>
 
-          {/* Software hint */}
+          {/* Software hint for mods */}
           {selectedSoftware?.mods && (
-            <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-400">
+            <div className="rounded-md bg-accent/10 border border-accent/20 px-3 py-2 text-xs text-accent/90">
               {form.software} es compatible con mods .jar. Podrás instalarlos desde la sección Mods una vez creado el servidor.
             </div>
           )}
@@ -245,14 +346,14 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-md border px-4 py-2 text-sm hover:bg-muted transition-colors"
+              className="flex-1 rounded-md border border-border px-4 py-2 text-sm hover:bg-muted transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              className="flex-1 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors neon-primary"
             >
               {loading ? "Creando…" : "Crear servidor"}
             </button>

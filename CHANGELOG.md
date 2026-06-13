@@ -6,6 +6,23 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.5] — Estabilización v1.0 (BUG #10 + BUG #11)
+
+### Fixed
+- **BUG #10 — Identidad visual cyberpunk inconsistente**:
+  - `src/index.css`: Tema cyberpunk completo — variables CSS (`--primary` neon púrpura, `--accent` neon rosa, `--background` azul oscuro), overlay de scanlines en `body::before`, utilidades `.neon-primary`, `.neon-accent`, `.neon-border`.
+  - `tailwind.config.js`: Token `accent` mapeado a `hsl(var(--accent))`.
+  - `src/main.tsx`: Fuerza la clase `dark` en `<html>` antes del render.
+  - `src/components/Sidebar.tsx`: Reescrito — barra de acento izquierda con gradiente neon, logo con glow púrpura, ítem activo con borde neon y barra indicadora izquierda, footer con versión `v1.0.0` y punto animado rosa "online".
+  - `src/components/StatusBadge.tsx`: Reescrito — estados Running/Starting/Crashed con colores neon y puntos pulsantes.
+- **BUG #11 — Java detection manual / path estático en CreateServer**:
+  - `crates/cubed-infrastructure/src/java/system_java_manager.rs`: `SystemJavaManager` detecta instalaciones Java vía rutas estáticas, `which java` y `JAVA_HOME`; `select_for_version(mc_version)` elige la mejor versión compatible.
+  - `src-tauri/src/commands.rs`: Comandos `detect_java` y `select_java_for_version` + `java_mgr: Arc<SystemJavaManager>` en `AppState`.
+  - `src-tauri/src/lib.rs`: `java_mgr` inicializado y registrado; comandos incluidos en `invoke_handler`.
+  - `src/types.ts`: Interfaz `JavaInstallationDto` añadida.
+  - `src/api.ts`: `detectJava()` y `selectJavaForVersion()` añadidos.
+  - `src/components/CreateServerModal.tsx`: Reescrito — al montar y al cambiar la versión de Minecraft (debounce 500 ms), llama `detectJava()` + `selectJavaForVersion()` en paralelo; muestra el Java auto-seleccionado con badge "Java detectado automáticamente"; dropdown para escoger entre instalaciones detectadas; aviso si no se encuentra Java instalado.
+
 ## [1.0.4] — Estabilización v1.0 (BUG #8 + BUG #9)
 
 ### Fixed
