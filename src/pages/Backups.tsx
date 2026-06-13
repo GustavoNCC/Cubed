@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArchiveRestore, ChevronLeft, Download, Plus, Trash2 } from "lucide-react";
+import { ArchiveRestore, CheckCircle, ChevronLeft, Download, Plus, Trash2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Server } from "../types";
 
@@ -31,6 +31,7 @@ export function Backups({ server, onBack }: Props) {
   const [loading, setLoading]   = useState(false);
   const [working, setWorking]   = useState<string | null>(null);
   const [error, setError]       = useState<string | null>(null);
+  const [info, setInfo]         = useState<string | null>(null);
 
   async function refresh() {
     try {
@@ -46,6 +47,7 @@ export function Backups({ server, onBack }: Props) {
   async function handleCreate() {
     setLoading(true);
     setError(null);
+    setInfo(null);
     try {
       await invoke("create_backup", {
         serverId:   server.id,
@@ -63,6 +65,7 @@ export function Backups({ server, onBack }: Props) {
   async function handleDelete(id: string) {
     setWorking(id);
     setError(null);
+    setInfo(null);
     try {
       await invoke("delete_backup", { backupId: id, deleteFile: true });
       setBackups((prev) => prev.filter((b) => b.id !== id));
@@ -76,12 +79,11 @@ export function Backups({ server, onBack }: Props) {
   async function handleRestore(id: string) {
     setWorking(id);
     setError(null);
+    setInfo(null);
     try {
-      await invoke("restore_backup", {
-        backupId:   id,
-        restoreDir: `/tmp/cubed-dev/servers/${server.name}_restored`,
-      });
-      alert("Backup restaurado en: /tmp/cubed-dev/servers/" + server.name + "_restored");
+      const restoreDir = `/tmp/cubed-dev/servers/${server.name}_restored`;
+      await invoke("restore_backup", { backupId: id, restoreDir });
+      setInfo(`Backup restaurado en: ${restoreDir}`);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -115,6 +117,11 @@ export function Backups({ server, onBack }: Props) {
         </button>
       </div>
 
+      {info && (
+        <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-4 py-2 text-sm text-primary">
+          <CheckCircle className="h-4 w-4 shrink-0" /> {info}
+        </div>
+      )}
       {error && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-2 text-sm text-destructive">
           {error}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Cpu, HardDrive, MemoryStick, Network } from "lucide-react";
 import { api } from "../api";
 import { TailscalePanel } from "../components/TailscalePanel";
@@ -14,10 +14,18 @@ function fmt_bytes(b: number): string {
   return `${(b / 1e3).toFixed(0)} KB`;
 }
 
+function fmt_rate(bps: number): string {
+  if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} MB/s`;
+  if (bps >= 1e3) return `${(bps / 1e3).toFixed(0)} KB/s`;
+  return `${bps.toFixed(0)} B/s`;
+}
+
 function pct(used: number, total: number): number {
   if (total === 0) return 0;
   return Math.round((used / total) * 100);
 }
+
+interface NetRate { rx: number; tx: number }
 
 export function Dashboard({ servers }: Props) {
   const total   = servers.length;
@@ -25,7 +33,9 @@ export function Dashboard({ servers }: Props) {
   const crashed = servers.filter((s) => s.status === "crashed").length;
   const offline = servers.filter((s) => s.status === "offline").length;
 
-  const [sys, setSys] = useState<SystemStats | null>(null);
+  const [sys, setSys]         = useState<SystemStats | null>(null);
+  const [netRate, setNetRate] = useState<NetRate | null>(null);
+  const prevNet = useRef<{ rx: number; tx: number; ts: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -33,7 +43,20 @@ export function Dashboard({ servers }: Props) {
       while (alive) {
         try {
           const stats = await api.getSystemStats();
-          if (alive) setSys(stats);
+          if (alive) {
+            setSys(stats);
+            const now = Date.now();
+            if (prevNet.current) {
+              const dt = (now - prevNet.current.ts) / 1000;
+              if (dt > 0) {
+                setNetRate({
+                  rx: Math.max(0, (stats.net_rx_bytes - prevNet.current.rx) / dt),
+                  tx: Math.max(0, (stats.net_tx_bytes - prevNet.current.tx) / dt),
+                });
+              }
+            }
+            prevNet.current = { rx: stats.net_rx_bytes, tx: stats.net_tx_bytes, ts: now };
+          }
         } catch {
           // silently ignore — may fail in browser dev mode
         }
@@ -51,9 +74,9 @@ export function Dashboard({ servers }: Props) {
       {/* Server counters */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Total"   value={total} />
-        <StatCard label="Activos" value={running} accent="green" />
+        <StatCard label="Activos" value={running} accent="primary" />
         <StatCard label="Offline" value={offline} />
-        <StatCard label="Caídos"  value={crashed} accent="red" />
+        <StatCard label="Caídos"  value={crashed} accent="destructive" />
       </div>
 
       {/* Network / Tailscale */}
@@ -87,7 +110,9 @@ export function Dashboard({ servers }: Props) {
             <ResourceCard
               icon={<Network className="h-4 w-4" />}
               label="Red ↓/↑"
-              value={`${fmt_bytes(sys.net_rx_bytes)} / ${fmt_bytes(sys.net_tx_bytes)}`}
+              value={netRate
+                ? `${fmt_rate(netRate.rx)} / ${fmt_rate(netRate.tx)}`
+                : "Midiendo…"}
               bar={null}
             />
           </div>
@@ -107,7 +132,7 @@ export function Dashboard({ servers }: Props) {
               <li key={s.id} className="flex items-center justify-between px-4 py-3 text-sm">
                 <span className="font-medium">{s.name}</span>
                 <span className="text-muted-foreground">{s.software} {s.version} · :{s.port}</span>
-                <span className={`text-xs ${s.status === "running" ? "text-green-600" : s.status === "crashed" ? "text-red-600" : "text-muted-foreground"}`}>
+                <span className={`text-xs ${s.status === "running" ? "text-primary" : s.status === "crashed" ? "text-destructive" : "text-muted-foreground"}`}>
                   {s.status}
                 </span>
               </li>
@@ -119,11 +144,11 @@ export function Dashboard({ servers }: Props) {
   );
 }
 
-function StatCard({ label, value, accent }: { label: string; value: number; accent?: "green" | "red" }) {
+function StatCard({ label, value, accent }: { label: string; value: number; accent?: "primary" | "destructive" }) {
   return (
-    <div className="rounded-lg border bg-card p-4 flex flex-col gap-1">
+    <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className={`text-3xl font-bold ${accent === "green" ? "text-green-600" : accent === "red" ? "text-red-600" : "text-foreground"}`}>
+      <span className={`text-3xl font-bold ${accent === "primary" ? "text-primary" : accent === "destructive" ? "text-destructive" : "text-foreground"}`}>
         {value}
       </span>
     </div>

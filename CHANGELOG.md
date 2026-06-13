@@ -6,6 +6,17 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.6] — Estabilización v1.0 (BUG #12 + BUG #13)
+
+### Fixed
+- **BUG #12 — Widget de red mostraba bytes acumulados desde el arranque en lugar de throughput**:
+  - `src/pages/Dashboard.tsx`: Añadida lógica de delta entre polls — `prevNet` ref almacena `{ rx, tx, timestamp }` del poll anterior; cada nuevo poll calcula `(delta_bytes) / elapsed_secs` → tasa en KB/s o MB/s. En el primer poll muestra "Midiendo…" hasta tener dos muestras. Nueva función `fmt_rate()` formatea bytes/seg como B/s / KB/s / MB/s.
+- **BUG #13 — Auditoría del codebase**:
+  - `src/pages/Dashboard.tsx`: `StatCard` usa `text-primary` para servidores activos y `text-destructive` para caídos (antes: `text-green-600` / `text-red-600` hardcodeados). Lista de actividad reciente actualizada con los mismos tokens.
+  - `src/components/TailscalePanel.tsx`: Icono de estado usa `text-primary` (conectado) y `text-accent` (desconectado) en lugar de `text-green-500` / `text-yellow-500`.
+  - `src/pages/Backups.tsx`: Reemplazado `alert()` del navegador por mensaje de éxito inline (`setInfo`) con icono `CheckCircle` y estilo neon del tema.
+  - `src/pages/Servers.tsx`: Botón "Nuevo" incluye clase `neon-primary` para coherencia cyberpunk.
+
 ## [1.0.5] — Estabilización v1.0 (BUG #10 + BUG #11)
 
 ### Fixed

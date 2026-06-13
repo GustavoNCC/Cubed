@@ -72,8 +72,8 @@ export function TailscalePanel() {
 
 function StatusIcon({ state }: { state: string }) {
   if (state === "connected")
-    return <Wifi className="h-4 w-4 text-green-500" />;
+    return <Wifi className="h-4 w-4 text-primary" />;
   if (state === "disconnected")
-    return <WifiOff className="h-4 w-4 text-yellow-500" />;
+    return <WifiOff className="h-4 w-4 text-accent" />;
   return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
 }
