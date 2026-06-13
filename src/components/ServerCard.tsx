@@ -1,6 +1,8 @@
-import { Play, Square, Trash2, Terminal, Archive, Package, Layers } from "lucide-react";
+import { useState } from "react";
+import { Play, Square, Trash2, Terminal, Archive, Package, Layers, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./StatusBadge";
+import { api } from "../api";
 import type { Server } from "../types";
 
 interface Props {
@@ -18,6 +20,18 @@ interface Props {
 export function ServerCard({ server, onStart, onStop, onDelete, onConsole, onBackups, onMods, onModpacks, loading }: Props) {
   const canStart  = server.status === "offline" || server.status === "crashed";
   const canStop   = server.status === "running";
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopyAddress() {
+    try {
+      const addr = await api.serverConnectAddress(server.id);
+      if (addr) {
+        await navigator.clipboard.writeText(addr);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch { /* ignore */ }
+  }
   const canDelete = server.status === "offline" || server.status === "crashed";
 
   return (
@@ -85,6 +99,15 @@ export function ServerCard({ server, onStart, onStop, onDelete, onConsole, onBac
           className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
         >
           <Layers className="h-3 w-3" /> Modpacks
+        </button>
+
+        <button
+          onClick={handleCopyAddress}
+          title="Copiar dirección Tailscale"
+          className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
+        >
+          {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+          {copied ? "Copiado" : "Dirección"}
         </button>
 
         <button

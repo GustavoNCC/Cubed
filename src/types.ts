@@ -35,6 +35,12 @@ export interface ServerStats {
   uptime_secs: number;
 }
 
+export interface TailscaleStatusDto {
+  state: "not_installed" | "disconnected" | "connected";
+  ip: string | null;
+  hostname: string | null;
+}
+
 export interface BackupDto {
   id: string;
   server_id: string;

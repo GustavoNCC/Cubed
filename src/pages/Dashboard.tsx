@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Cpu, HardDrive, MemoryStick, Network } from "lucide-react";
 import { api } from "../api";
+import { TailscalePanel } from "../components/TailscalePanel";
 import type { Server, SystemStats } from "../types";
 
 interface Props {
@@ -53,6 +54,11 @@ export function Dashboard({ servers }: Props) {
         <StatCard label="Activos" value={running} accent="green" />
         <StatCard label="Offline" value={offline} />
         <StatCard label="Caídos"  value={crashed} accent="red" />
+      </div>
+
+      {/* Network / Tailscale */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <TailscalePanel />
       </div>
 
       {/* System resources */}

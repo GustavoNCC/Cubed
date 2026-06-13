@@ -5,9 +5,9 @@ use uuid::Uuid;
 
 use cubed_domain::entities::{ServerSoftware, ServerStatus};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
-use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModpackRepository, ModRepository, ResourceMonitor, ServerRepository};
+use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ModpackRepository, ModRepository, NetworkManager, ResourceMonitor, ServerRepository, TailscaleStatus};
 use cubed_application::use_cases::{CreateBackup, CreateBackupInput, DeleteBackup, ListBackups, ListMods, RemoveMod};
-use cubed_infrastructure::{FileBackupManager, FileModManager, InMemoryBackupRepo, MinecraftConsoleManager, ModpackInstaller, SysInfoResourceMonitor};
+use cubed_infrastructure::{FileBackupManager, FileModManager, InMemoryBackupRepo, MinecraftConsoleManager, ModpackInstaller, SysInfoResourceMonitor, TailscaleNetworkManager};
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -52,6 +52,7 @@ pub struct AppState {
     pub mod_mgr:       Arc<FileModManager>,
     pub modpack_repo:  Arc<dyn ModpackRepository>,
     pub modpack_inst:  Arc<ModpackInstaller>,
+    pub network:       Arc<TailscaleNetworkManager>,
 }
 
 // ── Server commands ──────────────────────────────────────────────────────────
@@ -491,4 +492,59 @@ pub async fn delete_modpack(
 ) -> Result<(), String> {
     let uuid = Uuid::parse_str(&modpack_id).map_err(|e| e.to_string())?;
     state.modpack_repo.delete(uuid).await.map_err(|e| e.to_string())
+}
+
+// ── Network / Tailscale commands ──────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct TailscaleStatusDto {
+    /// "not_installed" | "disconnected" | "connected"
+    pub state: String,
+    pub ip: Option<String>,
+    pub hostname: Option<String>,
+}
+
+fn tailscale_status_to_dto(s: TailscaleStatus) -> TailscaleStatusDto {
+    match s {
+        TailscaleStatus::NotInstalled => TailscaleStatusDto { state: "not_installed".into(), ip: None, hostname: None },
+        TailscaleStatus::Disconnected => TailscaleStatusDto { state: "disconnected".into(), ip: None, hostname: None },
+        TailscaleStatus::Connected { ip, hostname } => TailscaleStatusDto {
+            state: "connected".into(),
+            ip: Some(ip),
+            hostname: Some(hostname),
+        },
+    }
+}
+
+/// Detecta si Tailscale está instalado en el sistema.
+#[tauri::command]
+pub async fn tailscale_is_installed(state: State<'_, AppState>) -> Result<bool, String> {
+    state.network.is_installed().await.map_err(|e| e.to_string())
+}
+
+/// Devuelve el estado actual de Tailscale (not_installed | disconnected | connected).
+#[tauri::command]
+pub async fn tailscale_status(state: State<'_, AppState>) -> Result<TailscaleStatusDto, String> {
+    let s = state.network.status().await.map_err(|e| e.to_string())?;
+    Ok(tailscale_status_to_dto(s))
+}
+
+/// Devuelve la IP de Tailscale si está conectado.
+#[tauri::command]
+pub async fn tailscale_ip(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    state.network.tailscale_ip().await.map_err(|e| e.to_string())
+}
+
+/// Construye la dirección de conexión al servidor: `<tailscale_ip>:<port>`.
+/// Útil para copiar al portapapeles.
+#[tauri::command]
+pub async fn server_connect_address(
+    server_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
+    let server = state.repo.find_by_id(uuid).await.map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Servidor {} no encontrado", server_id))?;
+    let ip = state.network.tailscale_ip().await.map_err(|e| e.to_string())?;
+    Ok(ip.map(|addr| format!("{}:{}", addr, server.port().value())))
 }

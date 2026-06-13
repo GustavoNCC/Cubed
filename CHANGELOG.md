@@ -6,6 +6,33 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.14.0] — Fase 14: Network Manager (Tailscale)
+
+### Added
+- **Puerto `NetworkManager`** (`cubed-application/src/ports/network_manager.rs`):
+  - `TailscaleStatus` enum: `NotInstalled`, `Disconnected`, `Connected { ip, hostname }`.
+  - Trait async `is_installed()`, `status()`, `tailscale_ip()`.
+- **`TailscaleNetworkManager`** (`cubed-infrastructure/src/network/`):
+  - Detecta el binario `tailscale` en PATH y rutas conocidas (macOS, Linux, Windows).
+  - Ejecuta `tailscale status --json` y parsea `BackendState`, `Self.TailscaleIPs[0]`, `Self.HostName`.
+  - 3 tests unitarios (is_installed, status, ip consistent).
+- **4 comandos Tauri nuevos** (`src-tauri/src/commands.rs`):
+  - `tailscale_is_installed` → `bool`.
+  - `tailscale_status` → `TailscaleStatusDto { state, ip, hostname }`.
+  - `tailscale_ip` → `Option<String>`.
+  - `server_connect_address(server_id)` → `Option<String>` (`<ts_ip>:<port>`).
+- **`TailscalePanel`** (`src/components/TailscalePanel.tsx`):
+  - Muestra estado Tailscale (no instalado / desconectado / conectado + IP).
+  - Polling cada 5 s para mantener estado fresco.
+  - Botón "Copiar IP" al portapapeles.
+  - Integrado en el Dashboard.
+- **Botón "Dirección"** en `ServerCard`:
+  - Llama a `server_connect_address` y copia `<ts_ip>:<port>` al portapapeles.
+  - Feedback visual "Copiado ✓" durante 2 s.
+
+### Tests
+- 51 tests pasando (`cargo test`). Build frontend: ✓ (211 KB JS gzip: 63 KB).
+
 ## [0.13.0] — Fase 13: Modpack Manager
 
 ### Added
