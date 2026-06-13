@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Server, CreateServerForm, SystemStats, ServerStats } from "./types";
+import type { BackupDto, Server, CreateServerForm, SystemStats, ServerStats } from "./types";
 
 export const api = {
   listServers: () => invoke<Server[]>("list_servers"),
@@ -9,4 +9,11 @@ export const api = {
   deleteServer: (id: string) => invoke<void>("delete_server", { id }),
   getSystemStats: () => invoke<SystemStats>("get_system_stats"),
   getServerStats: (id: string, pid: number) => invoke<ServerStats | null>("get_server_stats", { id, pid }),
+  listBackups: (serverId: string) => invoke<BackupDto[]>("list_backups", { serverId }),
+  createBackup: (serverId: string, serverName: string, serverDir: string) =>
+    invoke<BackupDto>("create_backup", { serverId, serverName, serverDir }),
+  restoreBackup: (backupId: string, restoreDir: string) =>
+    invoke<void>("restore_backup", { backupId, restoreDir }),
+  deleteBackup: (backupId: string, deleteFile = true) =>
+    invoke<void>("delete_backup", { backupId, deleteFile }),
 };

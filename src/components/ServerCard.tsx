@@ -1,4 +1,4 @@
-import { Play, Square, Trash2, Terminal } from "lucide-react";
+import { Play, Square, Trash2, Terminal, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./StatusBadge";
 import type { Server } from "../types";
@@ -9,10 +9,11 @@ interface Props {
   onStop: (id: string) => void;
   onDelete: (id: string) => void;
   onConsole: () => void;
+  onBackups: () => void;
   loading: boolean;
 }
 
-export function ServerCard({ server, onStart, onStop, onDelete, onConsole, loading }: Props) {
+export function ServerCard({ server, onStart, onStop, onDelete, onConsole, onBackups, loading }: Props) {
   const canStart  = server.status === "offline" || server.status === "crashed";
   const canStop   = server.status === "running";
   const canDelete = server.status === "offline" || server.status === "crashed";
@@ -61,6 +62,13 @@ export function ServerCard({ server, onStart, onStop, onDelete, onConsole, loadi
           className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
         >
           <Terminal className="h-3 w-3" /> Consola
+        </button>
+
+        <button
+          onClick={onBackups}
+          className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
+        >
+          <Archive className="h-3 w-3" /> Backups
         </button>
 
         <button

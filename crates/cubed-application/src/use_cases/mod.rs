@@ -1,7 +1,10 @@
+pub mod create_backup;
 pub mod create_server;
+pub mod delete_backup;
 pub mod delete_server;
 pub mod download_server_jar;
 pub mod init_file_system;
+pub mod list_backups;
 pub mod monitor_server;
 pub mod reserve_port;
 pub mod restart_server;
@@ -11,10 +14,13 @@ pub mod server_console;
 pub mod start_server;
 pub mod stop_server;
 
+pub use create_backup::{CreateBackup, CreateBackupInput};
 pub use create_server::{CreateServer, CreateServerInput};
+pub use delete_backup::DeleteBackup;
 pub use delete_server::DeleteServer;
 pub use download_server_jar::DownloadServerJar;
 pub use init_file_system::InitFileSystem;
+pub use list_backups::ListBackups;
 pub use monitor_server::MonitorServer;
 pub use reserve_port::ReservePort;
 pub use restart_server::RestartServer;

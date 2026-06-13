@@ -5,8 +5,9 @@ use uuid::Uuid;
 
 use cubed_domain::entities::{ServerSoftware, ServerStatus};
 use cubed_application::use_cases::{CreateServer, CreateServerInput};
-use cubed_application::ports::{ConsoleLine, ConsoleManager, FileSystemManager, ResourceMonitor, ServerRepository};
-use cubed_infrastructure::{MinecraftConsoleManager, SysInfoResourceMonitor};
+use cubed_application::ports::{BackupRepository, ConsoleLine, ConsoleManager, FileSystemManager, ResourceMonitor, ServerRepository};
+use cubed_application::use_cases::{CreateBackup, CreateBackupInput, DeleteBackup, ListBackups};
+use cubed_infrastructure::{FileBackupManager, InMemoryBackupRepo, MinecraftConsoleManager, SysInfoResourceMonitor};
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -41,10 +42,12 @@ pub struct ConsoleLineEvent {
 // ── App state ─────────────────────────────────────────────────────────────────
 
 pub struct AppState {
-    pub repo:      Arc<dyn ServerRepository>,
-    pub fs:        Arc<dyn FileSystemManager>,
-    pub console:   Arc<MinecraftConsoleManager>,
-    pub resources: Arc<SysInfoResourceMonitor>,
+    pub repo:        Arc<dyn ServerRepository>,
+    pub fs:          Arc<dyn FileSystemManager>,
+    pub console:     Arc<MinecraftConsoleManager>,
+    pub resources:   Arc<SysInfoResourceMonitor>,
+    pub backup_repo: Arc<dyn BackupRepository>,
+    pub backup_mgr:  Arc<FileBackupManager>,
 }
 
 // ── Server commands ──────────────────────────────────────────────────────────
@@ -248,4 +251,84 @@ pub async fn get_server_stats(
         ram_bytes: s.ram_bytes,
         uptime_secs: s.uptime_secs,
     }))
+}
+
+// ── Backup commands ───────────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct BackupDto {
+    pub id: String,
+    pub server_id: String,
+    pub path: String,
+    pub size_bytes: u64,
+    pub created_at: String,
+}
+
+fn backup_to_dto(b: &cubed_domain::entities::Backup) -> BackupDto {
+    BackupDto {
+        id: b.id().to_string(),
+        server_id: b.server_id().to_string(),
+        path: b.path().to_string(),
+        size_bytes: b.size_bytes(),
+        created_at: b.created_at().to_rfc3339(),
+    }
+}
+
+/// Crea un backup manual del servidor.
+/// `server_dir` debe ser la ruta absoluta al directorio del servidor.
+#[tauri::command]
+pub async fn create_backup(
+    server_id: String,
+    server_name: String,
+    server_dir: String,
+    state: State<'_, AppState>,
+) -> Result<BackupDto, String> {
+    let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
+    let backup = state.backup_mgr
+        .backup_server(uuid, &server_name, &server_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(backup_to_dto(&backup))
+}
+
+/// Lista todos los backups de un servidor, ordenados por fecha desc.
+#[tauri::command]
+pub async fn list_backups(
+    server_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<BackupDto>, String> {
+    let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
+    let uc = ListBackups::new(state.backup_repo.clone());
+    let list = uc.execute(uuid).await.map_err(|e| e.to_string())?;
+    Ok(list.iter().map(backup_to_dto).collect())
+}
+
+/// Restaura un backup en el directorio indicado.
+#[tauri::command]
+pub async fn restore_backup(
+    backup_id: String,
+    restore_dir: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let uuid = Uuid::parse_str(&backup_id).map_err(|e| e.to_string())?;
+    state.backup_mgr
+        .restore_backup(uuid, &restore_dir)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Elimina un backup del registro y opcionalmente del disco.
+#[tauri::command]
+pub async fn delete_backup(
+    backup_id: String,
+    delete_file: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let uuid = Uuid::parse_str(&backup_id).map_err(|e| e.to_string())?;
+    let uc = DeleteBackup::new(state.backup_repo.clone());
+    let path = uc.execute(uuid).await.map_err(|e| e.to_string())?;
+    if delete_file {
+        let _ = tokio::fs::remove_file(&path).await; // best-effort
+    }
+    Ok(())
 }

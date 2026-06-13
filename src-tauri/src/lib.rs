@@ -3,7 +3,10 @@ mod in_memory_repo;
 
 use std::sync::Arc;
 use commands::AppState;
-use cubed_infrastructure::{LocalFileSystem, MinecraftConsoleManager, SysInfoResourceMonitor};
+use cubed_infrastructure::{
+    FileBackupManager, InMemoryBackupRepo, LocalFileSystem,
+    MinecraftConsoleManager, SysInfoResourceMonitor,
+};
 
 #[tauri::command]
 fn health_check() -> String {
@@ -12,14 +15,20 @@ fn health_check() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let repo      = in_memory_repo::InMemoryServerRepo::new();
-    let fs        = Arc::new(LocalFileSystem::new("/tmp/cubed-dev"));
-    let console   = Arc::new(MinecraftConsoleManager::new());
-    let resources = Arc::new(SysInfoResourceMonitor::new());
+    let repo        = in_memory_repo::InMemoryServerRepo::new();
+    let fs          = Arc::new(LocalFileSystem::new("/tmp/cubed-dev"));
+    let console     = Arc::new(MinecraftConsoleManager::new());
+    let resources   = Arc::new(SysInfoResourceMonitor::new());
+    let backup_repo = InMemoryBackupRepo::new();
+    let backup_mgr  = FileBackupManager::new(
+        "/tmp/cubed-dev/backups",
+        repo.clone(),
+        backup_repo.clone(),
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(AppState { repo, fs, console, resources })
+        .manage(AppState { repo, fs, console, resources, backup_repo, backup_mgr })
         .invoke_handler(tauri::generate_handler![
             health_check,
             commands::list_servers,
@@ -32,6 +41,10 @@ pub fn run() {
             commands::get_console_tail,
             commands::get_system_stats,
             commands::get_server_stats,
+            commands::create_backup,
+            commands::list_backups,
+            commands::restore_backup,
+            commands::delete_backup,
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar la aplicación Cubed");

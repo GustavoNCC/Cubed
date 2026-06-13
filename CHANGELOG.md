@@ -6,6 +6,36 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.11.0] — Fase 11: Backup Manager
+
+### Added
+- **Puerto `BackupRepository`** (`cubed-application/src/ports/backup_repository.rs`):
+  - `save`, `find_by_id`, `find_by_server`, `delete`.
+- **Casos de uso** (`cubed-application/src/use_cases/`):
+  - `CreateBackup` — verifica existencia del servidor y persiste el backup.
+  - `ListBackups` — lista backups de un servidor ordenados por fecha desc.
+  - `DeleteBackup` — elimina del repositorio y devuelve la ruta para borrar el archivo.
+- **`InMemoryBackupRepo`** (`cubed-infrastructure/src/backup/`) — repositorio en memoria para dev/tests.
+- **`FileBackupManager`** (`cubed-infrastructure/src/backup/`):
+  - `backup_server` — crea archivo `.tar.gz` con `tar -czf` y persiste metadatos.
+  - `restore_backup` — extrae el `.tar.gz` en el directorio indicado con `tar -xzf`.
+  - `start_scheduler / stop_scheduler` — ejecuta backups automáticos cada N segundos en una tarea tokio.
+- **`InMemoryServerRepo`** movida a `cubed-infrastructure/src/persistence/in_memory.rs` y reexportada públicamente.
+- **4 comandos Tauri nuevos** (`src-tauri/src/commands.rs`):
+  - `create_backup(server_id, server_name, server_dir)` → `BackupDto`.
+  - `list_backups(server_id)` → `Vec<BackupDto>`.
+  - `restore_backup(backup_id, restore_dir)`.
+  - `delete_backup(backup_id, delete_file)`.
+- **Frontend — `Backups.tsx`** (`src/pages/Backups.tsx`):
+  - Lista de backups con fecha, tamaño y acciones Restaurar/Eliminar.
+  - Botón "Crear backup" manual.
+  - Navegación desde cada `ServerCard` con botón "Backups".
+- **`types.ts`** — interfaz `BackupDto`.
+- **`api.ts`** — métodos `listBackups`, `createBackup`, `restoreBackup`, `deleteBackup`.
+
+### Tests
+- 42 tests pasando (`cargo test`). Build frontend: ✓ (195 KB JS gzip: 61 KB).
+
 ## [0.10.0] — Fase 10: Resource Manager
 
 ### Added

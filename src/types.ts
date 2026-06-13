@@ -34,3 +34,11 @@ export interface ServerStats {
   ram_bytes: number;
   uptime_secs: number;
 }
+
+export interface BackupDto {
+  id: string;
+  server_id: string;
+  path: string;
+  size_bytes: number;
+  created_at: string;
+}

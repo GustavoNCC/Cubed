@@ -1,3 +1,4 @@
+pub mod backup_repository;
 pub mod console;
 pub mod downloader;
 pub mod file_system;
@@ -7,6 +8,7 @@ pub mod process_manager;
 pub mod resource_monitor;
 pub mod server_repository;
 
+pub use backup_repository::BackupRepository;
 pub use console::{ConsoleLine, ConsoleCallback, ConsoleManager};
 pub use downloader::{DownloadedJar, Downloader};
 pub use file_system::FileSystemManager;
