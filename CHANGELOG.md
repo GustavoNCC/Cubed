@@ -6,6 +6,21 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.2.0] — Fase 2: Persistencia
+
+### Added
+- **SQLx 0.9** (`runtime-tokio`, `tls-native-tls`, `postgres`, `uuid`, `chrono`, `migrate`) en workspace.
+- **Migraciones SQL** (`cubed-infrastructure/migrations/`):
+  - `0001_create_servers.sql` — tabla `servers` con restricción de puerto único.
+  - `0002_create_backups.sql` — tabla `backups` con FK a `servers`.
+  - `0003_create_settings.sql` — tabla `settings` (fila única con valores por defecto).
+- **`PostgresServerRepository`** — implementación completa del puerto `ServerRepository`:
+  - `save` con upsert (`ON CONFLICT (id) DO UPDATE`).
+  - `find_by_id`, `find_all`, `delete`, `port_in_use`.
+- **`ServerRow`** — mapeo `FromRow` de PostgreSQL → entidades de dominio con conversión de `software` y `status`.
+- **`db::connect`** — crea el pool y ejecuta migraciones automáticamente al arrancar.
+- Los servidores sobreviven al reinicio de Cubed.
+
 ## [0.1.0] — Fase 1: Core del Sistema
 
 ### Added
