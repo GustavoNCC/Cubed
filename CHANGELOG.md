@@ -6,6 +6,23 @@ y versionado [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.7.0] — Fase 7: Server Manager
+
+### Added
+- **Puerto `ProcessManager`** (`cubed-application/ports/process_manager.rs`) — `spawn`, `stop`, `kill`, `is_alive`, `list_active`; devuelve `ProcessInfo` con `server_id` y `pid`.
+- **`MinecraftProcessManager`** (`cubed-infrastructure/process/`) — gestión real de procesos con `tokio::process::Child`:
+  - `spawn`: lanza `java -Xms{n/2}M -Xmx{n}M -jar server.jar --nogui` con stdin/stdout/stderr capturados.
+  - `stop`: escribe `stop\n` en stdin del proceso (parada limpia de Minecraft).
+  - `kill`: envía SIGKILL y elimina el proceso del mapa.
+  - `is_alive`: usa `try_wait()` sin bloquear; limpia el mapa si el proceso terminó.
+  - `list_active`: retorna snapshot de todos los PIDs activos (sync, no-blocking con `try_lock`).
+- **`RunServer`** — caso de uso que orquesta transición de estado de dominio + `ProcessManager`: `start`, `stop`, `kill`, `restart`.
+- **`MonitorServer`** — caso de uso que sincroniza el estado de dominio con la realidad del proceso (detecta crash inesperado y marca `Crashed`).
+- 5 tests con procesos reales del SO (`true`/`sleep` en Unix, `cmd`/`ping` en Windows).
+
+### Resultado
+Primer servidor ejecutándose desde Cubed.
+
 ## [0.6.0] — Fase 6: Downloader Manager
 
 ### Added
