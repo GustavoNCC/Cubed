@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { ChevronLeft, Send } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
-import type { Server } from "../types";
-
-interface ConsoleLine {
-  server_id: string;
-  is_stdout: boolean;
-  text: string;
-}
+import { api } from "../api";
+import { isTauriRuntime } from "../tauriRuntime";
+import type { ConsoleLine, Server } from "../types";
 
 interface Props {
   server: Server;
@@ -26,10 +21,10 @@ export function Console({ server, onBack }: Props) {
     let unlisten: (() => void) | null = null;
 
     async function setup() {
+      if (!isTauriRuntime()) return;
+
       // Subscribe and get history
-      const history = await invoke<ConsoleLine[]>("subscribe_console", {
-        id: server.id,
-      });
+      const history = await api.subscribeConsole(server.id);
       setLines(history);
 
       // Listen for new lines via Tauri event
@@ -58,7 +53,7 @@ export function Console({ server, onBack }: Props) {
     if (!cmd) return;
     setSending(true);
     try {
-      await invoke("send_console_command", { id: server.id, command: cmd });
+      await api.sendConsoleCommand(server.id, cmd);
       setInput("");
     } catch (err) {
       console.error(err);

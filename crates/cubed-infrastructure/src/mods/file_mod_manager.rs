@@ -50,7 +50,7 @@ impl FileModManager {
             })?
             .to_string();
 
-        if !file_name.ends_with(".jar") {
+        if !file_name.to_lowercase().ends_with(".jar") {
             return Err(ApplicationError::Infrastructure(format!(
                 "'{}' no es un archivo .jar",
                 file_name
@@ -60,13 +60,28 @@ impl FileModManager {
         // Validate JAR magic bytes
         Self::validate_jar(source_path).await?;
 
+        // Verify server exists
+        self.servers.find_by_id(server_id).await?.ok_or_else(|| {
+            ApplicationError::Infrastructure(format!("Servidor {} no encontrado", server_id))
+        })?;
+
+        // Check for duplicate
+        let existing = self.repo.find_by_server(server_id).await?;
+        if existing.iter().any(|entry| entry.file_name() == file_name) {
+            return Err(ApplicationError::Infrastructure(format!(
+                "El mod '{}' ya está instalado en este servidor",
+                file_name
+            )));
+        }
+
         // Copy to mods dir
         fs::create_dir_all(mods_dir).await.map_err(|e| {
             ApplicationError::Infrastructure(format!("No se pudo crear mods/: {}", e))
         })?;
 
-        let dest = format!("{}/{}", mods_dir, file_name);
-        fs::copy(source_path, &dest)
+        let dest_path = Path::new(mods_dir).join(&file_name);
+        let dest = dest_path.to_string_lossy().to_string();
+        fs::copy(source_path, &dest_path)
             .await
             .map_err(|e| ApplicationError::Infrastructure(format!("Error copiando mod: {}", e)))?;
 

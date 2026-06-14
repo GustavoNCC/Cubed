@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { isTauriRuntime } from "../tauriRuntime";
 
 type Handler = () => void;
 
@@ -14,6 +15,7 @@ interface UseAppEventsOptions {
 
 export function useAppEvents(opts: UseAppEventsOptions) {
   useEffect(() => {
+    if (!isTauriRuntime()) return;
     const subs: Array<Promise<() => void>> = [];
 
     if (opts.onServerStarted)

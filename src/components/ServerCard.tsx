@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   Play,
   Square,
+  RotateCcw,
   Trash2,
   Terminal,
   Archive,
@@ -13,12 +14,14 @@ import {
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./StatusBadge";
 import { api } from "../api";
+import { copyText } from "../clipboard";
 import type { Server } from "../types";
 
 interface Props {
   server: Server;
   onStart: (id: string) => void;
   onStop: (id: string) => void;
+  onRestart: (id: string) => void;
   onDelete: (id: string) => void;
   onConsole: () => void;
   onBackups: () => void;
@@ -39,6 +42,7 @@ export function ServerCard({
   server,
   onStart,
   onStop,
+  onRestart,
   onDelete,
   onConsole,
   onBackups,
@@ -48,19 +52,23 @@ export function ServerCard({
 }: Props) {
   const canStart = server.status === "offline" || server.status === "crashed";
   const canStop = server.status === "running";
+  const canRestart = server.status === "running";
   const canDelete = server.status === "offline" || server.status === "crashed";
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
 
   async function handleCopyAddress() {
     try {
       const addr = await api.serverConnectAddress(server.id);
       if (addr) {
-        await navigator.clipboard.writeText(addr);
+        await copyText(addr);
         setCopied(true);
+        setCopyFailed(false);
         setTimeout(() => setCopied(false), 2000);
       }
     } catch {
-      /* ignore */
+      setCopyFailed(true);
+      setTimeout(() => setCopyFailed(false), 2000);
     }
   }
 
@@ -119,6 +127,15 @@ export function ServerCard({
           Detener
         </ActionBtn>
 
+        <ActionBtn
+          onClick={() => onRestart(server.id)}
+          disabled={!canRestart || loading}
+          variant="ghost"
+          icon={<RotateCcw className="h-3.5 w-3.5" />}
+        >
+          Reiniciar
+        </ActionBtn>
+
         <div className="ml-auto flex items-center gap-1">
           <ActionBtn
             onClick={handleCopyAddress}
@@ -127,12 +144,17 @@ export function ServerCard({
               copied ? (
                 <Check className="h-3.5 w-3.5 text-green-500" />
               ) : (
-                <Wifi className="h-3.5 w-3.5" />
+                <Wifi
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    copyFailed && "text-destructive",
+                  )}
+                />
               )
             }
             title="Copiar dirección Tailscale"
           >
-            {copied ? "Copiado" : "Dirección"}
+            {copyFailed ? "Error" : copied ? "Copiado" : "Dirección"}
           </ActionBtn>
 
           <ActionBtn
@@ -152,78 +174,85 @@ export function ServerCard({
       </div>
 
       {/* Actions — row 2: secondary */}
-      <div className="px-4 pt-2 pb-4 flex items-center gap-2 flex-wrap">
-        <NavBtn onClick={onConsole} icon={<Terminal className="h-3.5 w-3.5" />}>
+      <div className="px-4 pt-2 pb-3 flex items-center gap-1 flex-wrap">
+        <ActionBtn
+          onClick={onConsole}
+          variant="ghost"
+          icon={<Terminal className="h-3.5 w-3.5" />}
+        >
           Consola
-        </NavBtn>
-        <NavBtn onClick={onBackups} icon={<Archive className="h-3.5 w-3.5" />}>
+        </ActionBtn>
+        <ActionBtn
+          onClick={onBackups}
+          variant="ghost"
+          icon={<Archive className="h-3.5 w-3.5" />}
+        >
           Backups
-        </NavBtn>
-        <NavBtn onClick={onMods} icon={<Package className="h-3.5 w-3.5" />}>
+        </ActionBtn>
+        <ActionBtn
+          onClick={onMods}
+          variant="ghost"
+          icon={<Package className="h-3.5 w-3.5" />}
+        >
           Mods
-        </NavBtn>
-        <NavBtn onClick={onModpacks} icon={<Layers className="h-3.5 w-3.5" />}>
+        </ActionBtn>
+        <ActionBtn
+          onClick={onModpacks}
+          variant="ghost"
+          icon={<Layers className="h-3.5 w-3.5" />}
+        >
           Modpacks
-        </NavBtn>
+        </ActionBtn>
       </div>
     </div>
   );
 }
 
-/* ── Sub-components ───────────────────────────────────────────────────────── */
+// ── ActionBtn ─────────────────────────────────────────────────────────────────
 
-type Variant = "primary" | "danger-outline" | "destructive" | "ghost";
+type BtnVariant =
+  | "primary"
+  | "danger-outline"
+  | "destructive"
+  | "ghost"
+  | "outline";
+
+const VARIANT_CLASSES: Record<BtnVariant, string> = {
+  primary:
+    "bg-primary text-primary-foreground hover:bg-primary/90 border-transparent",
+  "danger-outline":
+    "border-destructive/50 text-destructive hover:bg-destructive/10",
+  destructive: "bg-destructive/10 text-destructive hover:bg-destructive/20",
+  ghost:
+    "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50",
+  outline: "border-border text-foreground hover:bg-muted/50",
+};
 
 function ActionBtn({
-  children,
   onClick,
   disabled,
   variant,
   icon,
   title,
+  children,
 }: {
-  children?: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
-  variant: Variant;
-  icon: React.ReactNode;
+  variant: BtnVariant;
+  icon?: React.ReactNode;
   title?: string;
+  children?: React.ReactNode;
 }) {
-  const base =
-    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40";
-  const styles: Record<Variant, string> = {
-    primary: "bg-primary text-primary-foreground hover:bg-primary/90",
-    "danger-outline":
-      "border border-destructive/50 text-destructive hover:bg-destructive/10",
-    destructive: "text-destructive hover:bg-destructive/10",
-    ghost: "text-muted-foreground hover:text-foreground hover:bg-muted",
-  };
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={cn(base, styles[variant])}
-    >
-      {icon}
-      {children}
-    </button>
-  );
-}
-
-function NavBtn({
-  children,
-  onClick,
-  icon,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  icon: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 hover:bg-muted hover:text-foreground transition-colors"
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium transition-colors",
+        "disabled:opacity-40 disabled:cursor-not-allowed",
+        VARIANT_CLASSES[variant],
+      )}
     >
       {icon}
       {children}

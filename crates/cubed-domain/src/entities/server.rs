@@ -173,6 +173,11 @@ impl Server {
         self.transition(ServerStatus::Crashed);
     }
 
+    /// Reconciliación al arrancar Cubed sin un proceso administrado en memoria.
+    pub fn recover_as_offline(&mut self) {
+        self.transition(ServerStatus::Offline);
+    }
+
     // --- Getters ---
 
     pub fn id(&self) -> Uuid {
@@ -266,5 +271,14 @@ mod tests {
         assert_eq!(s.status(), &ServerStatus::Crashed);
         s.start().unwrap();
         assert_eq!(s.status(), &ServerStatus::Starting);
+    }
+
+    #[test]
+    fn recover_as_offline_resets_running_state() {
+        let mut s = make_server();
+        s.start().unwrap();
+        s.mark_running().unwrap();
+        s.recover_as_offline();
+        assert_eq!(s.status(), &ServerStatus::Offline);
     }
 }

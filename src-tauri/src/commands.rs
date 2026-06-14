@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
+use tokio::process::Command;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -13,14 +15,14 @@ use cubed_application::ports::{
     ModpackRepository, NetworkManager, ProcessManager, ResourceMonitor, ServerRepository,
     TailscaleStatus,
 };
-use cubed_application::use_cases::{CreateServer, CreateServerInput};
+use cubed_application::use_cases::{CreateServer, CreateServerInput, DownloadServerJar};
 use cubed_application::use_cases::{DeleteBackup, ListBackups, ListMods};
 use cubed_application::CubedEvent;
 use cubed_domain::entities::{ServerSoftware, ServerStatus, Settings};
 use cubed_infrastructure::{
-    FileBackupManager, FileModManager, MinecraftConsoleManager, MinecraftProcessManager,
-    ModpackInstaller, SysInfoResourceMonitor, SystemJavaManager, TailscaleNetworkManager,
-    TcpPortManager,
+    FileBackupManager, FileModManager, HttpDownloader, JsonSettingsStore, MinecraftConsoleManager,
+    MinecraftProcessManager, ModpackInstaller, PostgresSettingsStore, SysInfoResourceMonitor,
+    SystemJavaManager, TailscaleNetworkManager, TcpPortManager,
 };
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -55,13 +57,25 @@ pub struct ConsoleLineEvent {
 
 // ── App state ─────────────────────────────────────────────────────────────────
 
+pub enum SettingsStore {
+    Json(Arc<JsonSettingsStore>),
+    Postgres(Arc<PostgresSettingsStore>),
+}
+
+impl SettingsStore {
+    pub async fn save(&self, settings: &Settings) -> Result<(), String> {
+        match self {
+            Self::Json(store) => store.save(settings).map_err(|e| e.to_string()),
+            Self::Postgres(store) => store.save(settings).await.map_err(|e| e.to_string()),
+        }
+    }
+}
+
 pub struct AppState {
     pub repo: Arc<dyn ServerRepository>,
     pub fs: Arc<dyn FileSystemManager>,
     pub console: Arc<MinecraftConsoleManager>,
     pub process_mgr: Arc<MinecraftProcessManager>,
-    /// Directorio base donde se almacenan los servidores.
-    pub servers_dir: String,
     pub resources: Arc<SysInfoResourceMonitor>,
     pub backup_repo: Arc<dyn BackupRepository>,
     pub backup_mgr: Arc<FileBackupManager>,
@@ -71,8 +85,10 @@ pub struct AppState {
     pub modpack_inst: Arc<ModpackInstaller>,
     pub network: Arc<TailscaleNetworkManager>,
     pub java_mgr: Arc<SystemJavaManager>,
+    pub downloader: Arc<HttpDownloader>,
     pub event_bus: Arc<EventBus>,
-    /// Configuración global mutable en memoria (persistida en futuras fases).
+    pub settings_store: Arc<SettingsStore>,
+    /// Configuración global mutable y persistida.
     pub settings: Arc<RwLock<Settings>>,
 }
 
@@ -102,25 +118,97 @@ pub async fn create_server(
     if cmd.port < 1024 {
         return Err("El puerto debe ser >= 1024".into());
     }
+    if !TcpPortManager::new()
+        .is_free(cmd.port)
+        .await
+        .map_err(|e| e.to_string())?
+    {
+        return Err(format!(
+            "El puerto {} ya está ocupado por el sistema",
+            cmd.port
+        ));
+    }
     let software = parse_software(&cmd.software)?;
+    let java = state
+        .java_mgr
+        .inspect(&cmd.java_path)
+        .await
+        .map_err(|e| e.to_string())?;
+    state
+        .java_mgr
+        .validate_compatibility(&java, &cmd.version)
+        .map_err(|e| e.to_string())?;
+    let servers_dir = {
+        let settings = state.settings.read().await;
+        if cmd.servers_dir.trim().is_empty() {
+            settings.servers_dir.clone()
+        } else {
+            cmd.servers_dir.trim().to_string()
+        }
+    };
     let uc = CreateServer::new(state.repo.clone(), state.fs.clone());
     let server = uc
         .execute(CreateServerInput {
             name: cmd.name.trim().to_string(),
             version: cmd.version,
-            software,
+            software: software.clone(),
             port: cmd.port,
             java_path: cmd.java_path,
-            servers_dir: cmd.servers_dir,
+            servers_dir: servers_dir.clone(),
         })
         .await
         .map_err(|e| e.to_string())?;
+
+    let work_dir = format!("{}/{}", servers_dir, server.name());
+    let download = DownloadServerJar::new(state.downloader.clone())
+        .execute(&software, server.version().as_str(), &work_dir)
+        .await;
+
+    match download {
+        Ok(downloaded) => {
+            if let Err(e) = prepare_downloaded_server(
+                &software,
+                server.java_path().as_str(),
+                &work_dir,
+                &downloaded.path,
+            )
+            .await
+            {
+                let _ = state.repo.delete(server.id()).await;
+                let _ = tokio::fs::remove_dir_all(&work_dir).await;
+                return Err(format!("No se pudo preparar el runtime descargado: {}", e));
+            }
+        }
+        Err(e) => {
+            let _ = state.repo.delete(server.id()).await;
+            let _ = tokio::fs::remove_dir_all(&work_dir).await;
+            return Err(format!("No se pudo descargar el servidor: {}", e));
+        }
+    }
+
     info!(server_id = %server.id(), name = %server.name(), "server created");
     Ok(server_to_dto(&server))
 }
 
 #[tauri::command]
 pub async fn start_server(
+    id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ServerDto, String> {
+    let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    let server = state
+        .repo
+        .find_by_id(uuid)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
+
+    start_loaded_server(id, app, &state, server).await
+}
+
+#[tauri::command]
+pub async fn restart_server(
     id: String,
     app: AppHandle,
     state: State<'_, AppState>,
@@ -133,14 +221,72 @@ pub async fn start_server(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
 
-    let work_dir = format!("{}/{}", state.servers_dir, server.name());
-    let jar_path = format!("{}/server.jar", work_dir);
+    match server.status() {
+        ServerStatus::Running => {
+            server.stop().map_err(|e| e.to_string())?;
+            state.repo.save(&server).await.map_err(|e| e.to_string())?;
+            if let Err(e) = state.console.send_command(uuid, "stop").await {
+                warn!(server_id = %uuid, err = %e, "restart fallback: killing process");
+                state.process_mgr.kill(uuid).await.ok();
+            }
 
-    // Reject early if JAR is missing
-    if !std::path::Path::new(&jar_path).exists() {
+            for _ in 0..30 {
+                match state.process_mgr.is_alive(uuid).await {
+                    Ok(false) => break,
+                    Ok(true) => tokio::time::sleep(tokio::time::Duration::from_secs(1)).await,
+                    Err(_) => break,
+                }
+            }
+            if state.process_mgr.is_alive(uuid).await.unwrap_or(false) {
+                state.process_mgr.kill(uuid).await.ok();
+            }
+            state.console.detach(uuid).await;
+
+            if let Ok(Some(mut current)) = state.repo.find_by_id(uuid).await {
+                current.mark_offline().ok();
+                state.repo.save(&current).await.map_err(|e| e.to_string())?;
+                server = current;
+            }
+        }
+        ServerStatus::Offline | ServerStatus::Crashed => {}
+        ServerStatus::Starting | ServerStatus::Stopping => {
+            return Err(
+                "No se puede reiniciar mientras el servidor está cambiando de estado".into(),
+            );
+        }
+    }
+
+    start_loaded_server(id, app, &state, server).await
+}
+
+async fn start_loaded_server(
+    id: String,
+    app: AppHandle,
+    state: &AppState,
+    mut server: cubed_domain::entities::Server,
+) -> Result<ServerDto, String> {
+    let uuid = server.id();
+    let servers_dir = state.settings.read().await.servers_dir.clone();
+    let work_dir = format!("{}/{}", servers_dir, server.name());
+    let jar_path = format!("{}/server.jar", work_dir);
+    let script_path = format!("{}/cubed-start.sh", work_dir);
+    let java = state
+        .java_mgr
+        .inspect(server.java_path().as_str())
+        .await
+        .map_err(|e| e.to_string())?;
+    state
+        .java_mgr
+        .validate_compatibility(&java, server.version().as_str())
+        .map_err(|e| e.to_string())?;
+
+    // Reject early if no launch target is available
+    let has_script = Path::new(&script_path).exists();
+    let has_jar = Path::new(&jar_path).exists();
+    if !has_script && !has_jar {
         return Err(format!(
-            "JAR no encontrado en '{}'. Descarga el servidor primero.",
-            jar_path
+            "No se encontró un runtime arrancable en '{}'. Descarga el servidor primero.",
+            work_dir
         ));
     }
 
@@ -149,17 +295,34 @@ pub async fn start_server(
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
 
     // Spawn actual Java process
-    let (pid, stdin, stdout, stderr) = state
-        .process_mgr
-        .spawn_with_io(
-            uuid,
-            server.java_path().as_str(),
-            &jar_path,
-            &work_dir,
-            2048,
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+    let spawned = if has_script {
+        state
+            .process_mgr
+            .spawn_script_with_io(uuid, &script_path, &work_dir)
+            .await
+    } else {
+        state
+            .process_mgr
+            .spawn_with_io(
+                uuid,
+                server.java_path().as_str(),
+                &jar_path,
+                &work_dir,
+                2048,
+            )
+            .await
+    };
+    let (pid, stdin, stdout, stderr) = match spawned {
+        Ok(spawned) => spawned,
+        Err(e) => {
+            server.mark_crashed();
+            let _ = state.repo.save(&server).await;
+            state
+                .event_bus
+                .emit(CubedEvent::ServerCrashed { server_id: uuid });
+            return Err(e.to_string());
+        }
+    };
 
     info!(server_id = %uuid, pid, "java process spawned");
 
@@ -239,12 +402,14 @@ pub async fn start_server(
             if was_stopping || was_running {
                 // Clean shutdown path: Stopping → Offline
                 let _ = srv.mark_offline();
+                let _ = repo_w.save(&srv).await;
+                eb_w.emit(CubedEvent::ServerStopped { server_id: uuid });
             } else {
                 // Never reached Running → Crashed
                 srv.mark_crashed();
+                let _ = repo_w.save(&srv).await;
+                eb_w.emit(CubedEvent::ServerCrashed { server_id: uuid });
             }
-            let _ = repo_w.save(&srv).await;
-            eb_w.emit(CubedEvent::ServerStopped { server_id: uuid });
             info!(server_id = %uuid, "process exited, status updated");
         }
     });
@@ -270,6 +435,8 @@ pub async fn stop_server(id: String, state: State<'_, AppState>) -> Result<Serve
     if let Err(e) = state.console.send_command(uuid, "stop").await {
         warn!(server_id = %uuid, err = %e, "could not send stop via stdin, killing process");
         state.process_mgr.kill(uuid).await.ok();
+        server.mark_offline().map_err(|e| e.to_string())?;
+        state.repo.save(&server).await.map_err(|e| e.to_string())?;
     }
 
     state
@@ -288,10 +455,19 @@ pub async fn delete_server(id: String, state: State<'_, AppState>) -> Result<(),
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Servidor {} no encontrado", id))?;
-    if server.is_running() {
+    if !matches!(
+        server.status(),
+        ServerStatus::Offline | ServerStatus::Crashed
+    ) {
         warn!(server_id = %uuid, "delete rejected: server is running");
-        return Err("No se puede eliminar un servidor en ejecución".into());
+        return Err("Detén el servidor antes de eliminarlo".into());
     }
+    let servers_dir = state.settings.read().await.servers_dir.clone();
+    state
+        .fs
+        .delete_server_dir(&servers_dir, server.name().as_str())
+        .await
+        .map_err(|e| e.to_string())?;
     state.repo.delete(uuid).await.map_err(|e| e.to_string())?;
     info!(server_id = %uuid, "server deleted");
     Ok(())
@@ -406,6 +582,148 @@ fn parse_software(s: &str) -> Result<ServerSoftware, String> {
         "NeoForge" => Ok(ServerSoftware::NeoForge),
         other => Err(format!("Software desconocido: {}", other)),
     }
+}
+
+async fn prepare_downloaded_server(
+    software: &ServerSoftware,
+    java_path: &str,
+    work_dir: &str,
+    downloaded_path: &str,
+) -> Result<(), String> {
+    match software {
+        ServerSoftware::Forge | ServerSoftware::NeoForge => {
+            prepare_installer_based_server(software, java_path, work_dir, downloaded_path).await
+        }
+        ServerSoftware::Paper | ServerSoftware::Purpur | ServerSoftware::Fabric => {
+            let jar_path = Path::new(work_dir).join("server.jar");
+            if Path::new(downloaded_path) != jar_path {
+                tokio::fs::rename(downloaded_path, &jar_path)
+                    .await
+                    .map_err(|e| {
+                        format!(
+                            "No se pudo preparar server.jar desde '{}': {}",
+                            downloaded_path, e
+                        )
+                    })?;
+            }
+            Ok(())
+        }
+    }
+}
+
+async fn prepare_installer_based_server(
+    software: &ServerSoftware,
+    java_path: &str,
+    work_dir: &str,
+    downloaded_path: &str,
+) -> Result<(), String> {
+    let installer_name = format!("{}-installer.jar", software.to_string().to_lowercase());
+    let installer_path = Path::new(work_dir).join(installer_name);
+    if Path::new(downloaded_path) != installer_path {
+        tokio::fs::rename(downloaded_path, &installer_path)
+            .await
+            .map_err(|e| format!("No se pudo preparar el instalador: {}", e))?;
+    }
+
+    let status = Command::new(java_path)
+        .arg("-jar")
+        .arg(&installer_path)
+        .arg("--installServer")
+        .current_dir(work_dir)
+        .status()
+        .await
+        .map_err(|e| format!("No se pudo ejecutar el instalador: {}", e))?;
+    if !status.success() {
+        return Err(format!(
+            "El instalador de {} terminó con código {:?}",
+            software,
+            status.code()
+        ));
+    }
+
+    let run_sh = Path::new(work_dir).join("run.sh");
+    if run_sh.exists() {
+        write_loader_start_script(work_dir, java_path).await?;
+        return Ok(());
+    }
+
+    if let Some(server_jar) = find_loader_server_jar(work_dir, software).await? {
+        let target = Path::new(work_dir).join("server.jar");
+        if server_jar != target {
+            tokio::fs::copy(&server_jar, &target)
+                .await
+                .map_err(|e| format!("No se pudo preparar server.jar: {}", e))?;
+        }
+        return Ok(());
+    }
+
+    Err(format!(
+        "El instalador de {} no generó run.sh ni un JAR de servidor reconocible",
+        software
+    ))
+}
+
+async fn write_loader_start_script(work_dir: &str, java_path: &str) -> Result<(), String> {
+    let script_path = Path::new(work_dir).join("cubed-start.sh");
+    let java_dir = Path::new(java_path)
+        .parent()
+        .and_then(|p| p.to_str())
+        .unwrap_or("");
+    let content = format!(
+        "#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexport PATH='{}':\"$PATH\"\nexec sh ./run.sh nogui\n",
+        shell_single_quote(java_dir)
+    );
+    tokio::fs::write(&script_path, content)
+        .await
+        .map_err(|e| format!("No se pudo escribir cubed-start.sh: {}", e))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = tokio::fs::metadata(&script_path)
+            .await
+            .map_err(|e| format!("No se pudo leer permisos de cubed-start.sh: {}", e))?
+            .permissions();
+        permissions.set_mode(0o755);
+        tokio::fs::set_permissions(&script_path, permissions)
+            .await
+            .map_err(|e| format!("No se pudo hacer ejecutable cubed-start.sh: {}", e))?;
+    }
+
+    Ok(())
+}
+
+async fn find_loader_server_jar(
+    work_dir: &str,
+    software: &ServerSoftware,
+) -> Result<Option<PathBuf>, String> {
+    let base = PathBuf::from(work_dir);
+    let prefix = software.to_string().to_lowercase();
+    tokio::task::spawn_blocking(move || {
+        let entries = std::fs::read_dir(&base).map_err(|e| e.to_string())?;
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let lower = name.to_lowercase();
+            if lower.starts_with(&prefix)
+                && lower.ends_with(".jar")
+                && !lower.contains("installer")
+                && !lower.contains("client")
+            {
+                return Ok(Some(path));
+            }
+        }
+        Ok(None)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn shell_single_quote(value: &str) -> String {
+    value.replace('\'', "'\\''")
 }
 
 // ── Resource commands ─────────────────────────────────────────────────────────
@@ -904,21 +1222,41 @@ pub async fn save_settings(
     cmd: SaveSettingsCmd,
     state: State<'_, AppState>,
 ) -> Result<SettingsDto, String> {
-    // Basic validation
     if cmd.servers_dir.trim().is_empty() {
         return Err("El directorio de servidores no puede estar vacío".into());
     }
     if cmd.backups_dir.trim().is_empty() {
         return Err("El directorio de backups no puede estar vacío".into());
     }
+    if cmd.downloads_dir.trim().is_empty() {
+        return Err("El directorio de descargas no puede estar vacío".into());
+    }
+    if cmd.default_java_path.trim().is_empty() {
+        return Err("La ruta de Java por defecto no puede estar vacía".into());
+    }
+
+    let next = Settings {
+        servers_dir: cmd.servers_dir.trim().to_string(),
+        backups_dir: cmd.backups_dir.trim().to_string(),
+        downloads_dir: cmd.downloads_dir.trim().to_string(),
+        default_java_path: cmd.default_java_path.trim().to_string(),
+        backup_interval_secs: cmd.backup_interval_secs,
+    };
+
+    ensure_storage_dir("servidores", &next.servers_dir).await?;
+    ensure_storage_dir("backups", &next.backups_dir).await?;
+    ensure_storage_dir("descargas", &next.downloads_dir).await?;
+    ensure_absolute_path("Java por defecto", &next.default_java_path)?;
+
+    state.settings_store.save(&next).await?;
+    state
+        .backup_mgr
+        .set_backups_dir(next.backups_dir.clone())
+        .await;
 
     {
         let mut s = state.settings.write().await;
-        s.servers_dir = cmd.servers_dir.trim().to_string();
-        s.backups_dir = cmd.backups_dir.trim().to_string();
-        s.downloads_dir = cmd.downloads_dir.trim().to_string();
-        s.default_java_path = cmd.default_java_path.trim().to_string();
-        s.backup_interval_secs = cmd.backup_interval_secs;
+        *s = next;
     }
 
     // Reschedule automatic backup with the new interval
@@ -942,4 +1280,67 @@ pub async fn save_settings(
         default_java_path: s.default_java_path.clone(),
         backup_interval_secs: s.backup_interval_secs,
     })
+}
+
+fn ensure_absolute_path(label: &str, path: &str) -> Result<(), String> {
+    if !Path::new(path).is_absolute() {
+        return Err(format!("{} debe ser una ruta absoluta", label));
+    }
+    Ok(())
+}
+
+async fn ensure_storage_dir(label: &str, path: &str) -> Result<(), String> {
+    ensure_absolute_path(label, path)?;
+
+    tokio::fs::create_dir_all(path).await.map_err(|e| {
+        format!(
+            "No se pudo crear el directorio de {} '{}': {}",
+            label, path, e
+        )
+    })?;
+
+    let meta = tokio::fs::metadata(path).await.map_err(|e| {
+        format!(
+            "No se pudo leer el directorio de {} '{}': {}",
+            label, path, e
+        )
+    })?;
+    if !meta.is_dir() {
+        return Err(format!(
+            "La ruta de {} no es un directorio: {}",
+            label, path
+        ));
+    }
+
+    let probe = Path::new(path).join(format!(".cubed-write-test-{}", Uuid::new_v4()));
+    tokio::fs::write(&probe, b"ok").await.map_err(|e| {
+        format!(
+            "El directorio de {} no es escribible '{}': {}",
+            label, path, e
+        )
+    })?;
+    let _ = tokio::fs::remove_file(&probe).await;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absolute_path_validation_rejects_relative_paths() {
+        assert!(ensure_absolute_path("servidores", "cubed/servers").is_err());
+    }
+
+    #[tokio::test]
+    async fn storage_dir_validation_creates_and_writes_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("servers");
+
+        ensure_storage_dir("servidores", target.to_str().unwrap())
+            .await
+            .unwrap();
+
+        assert!(target.is_dir());
+    }
 }

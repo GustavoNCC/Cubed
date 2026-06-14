@@ -18,16 +18,20 @@ pub mod port;
 pub mod process;
 pub mod resources;
 
-pub use backup::{FileBackupManager, InMemoryBackupRepo};
+pub use backup::{FileBackupManager, InMemoryBackupRepo, JsonBackupRepo, PostgresBackupRepo};
 pub use console::MinecraftConsoleManager;
 pub use downloader::HttpDownloader;
 pub use fs::LocalFileSystem;
 pub use java::SystemJavaManager;
-pub use modpacks::{InMemoryModpackRepo, InstallProgress, InstallSummary, ModpackInstaller};
-pub use mods::{FileModManager, InMemoryModRepo};
+pub use modpacks::{
+    InMemoryModpackRepo, InstallProgress, InstallSummary, JsonModpackRepo, ModpackInstaller,
+    PostgresModpackRepo,
+};
+pub use mods::{FileModManager, InMemoryModRepo, JsonModRepo, PostgresModRepo};
 pub use network::TailscaleNetworkManager;
 pub use persistence::{
-    check_integrity, connect, InMemoryServerRepo, JsonServerRepository, PostgresServerRepository,
+    check_integrity, connect, InMemoryServerRepo, JsonServerRepository, JsonSettingsStore,
+    PostgresServerRepository, PostgresSettingsStore,
 };
 pub use port::TcpPortManager;
 pub use process::MinecraftProcessManager;

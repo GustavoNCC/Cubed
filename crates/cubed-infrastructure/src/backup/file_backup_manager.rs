@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::process::Command;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -16,7 +16,7 @@ use cubed_domain::entities::Backup;
 /// Gestiona la creación y restauración de backups en disco (tar.gz).
 /// También puede iniciarse un scheduler automático cada N segundos.
 pub struct FileBackupManager {
-    backups_dir: String,
+    backups_dir: RwLock<String>,
     servers: Arc<dyn ServerRepository>,
     repo: Arc<dyn BackupRepository>,
     scheduler: Mutex<Option<JoinHandle<()>>>,
@@ -29,11 +29,15 @@ impl FileBackupManager {
         repo: Arc<dyn BackupRepository>,
     ) -> Arc<Self> {
         Arc::new(Self {
-            backups_dir: backups_dir.into(),
+            backups_dir: RwLock::new(backups_dir.into()),
             servers,
             repo,
             scheduler: Mutex::new(None),
         })
+    }
+
+    pub async fn set_backups_dir(&self, backups_dir: String) {
+        *self.backups_dir.write().await = backups_dir;
     }
 
     /// Crea un backup del directorio del servidor como archivo tar.gz.
@@ -47,10 +51,11 @@ impl FileBackupManager {
         debug!(server_id = %server_id, server_dir, "starting backup");
         let ts = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let filename = format!("{}_{}.tar.gz", server_name, ts);
-        let dest = format!("{}/{}", self.backups_dir, filename);
+        let backups_dir = self.backups_dir.read().await.clone();
+        let dest = format!("{}/{}", backups_dir, filename);
 
         // Ensure backups dir exists
-        fs::create_dir_all(&self.backups_dir).await.map_err(|e| {
+        fs::create_dir_all(&backups_dir).await.map_err(|e| {
             ApplicationError::Infrastructure(format!(
                 "No se pudo crear directorio de backups: {}",
                 e

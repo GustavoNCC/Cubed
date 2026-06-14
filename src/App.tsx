@@ -54,6 +54,11 @@ function App() {
     setServers((prev) => prev.map((s) => (s.id === id ? updated : s)));
   }
 
+  async function handleRestart(id: string) {
+    const updated = await api.restartServer(id);
+    setServers((prev) => prev.map((s) => (s.id === id ? updated : s)));
+  }
+
   async function handleDelete(id: string) {
     await api.deleteServer(id);
     setServers((prev) => prev.filter((s) => s.id !== id));
@@ -81,6 +86,7 @@ function App() {
               onRefresh={refresh}
               onStart={handleStart}
               onStop={handleStop}
+              onRestart={handleRestart}
               onDelete={handleDelete}
               onCreate={handleCreate}
               onConsole={setConsole}

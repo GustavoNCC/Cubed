@@ -1,7 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   BackupDto,
+  ConsoleLine,
+  InstallSummaryDto,
   JavaInstallationDto,
+  ModDto,
+  ModpackDto,
   Server,
   CreateServerForm,
   SystemStats,
@@ -16,7 +20,12 @@ export const api = {
     invoke<Server>("create_server", { cmd: form }),
   startServer: (id: string) => invoke<Server>("start_server", { id }),
   stopServer: (id: string) => invoke<Server>("stop_server", { id }),
+  restartServer: (id: string) => invoke<Server>("restart_server", { id }),
   deleteServer: (id: string) => invoke<void>("delete_server", { id }),
+  subscribeConsole: (id: string) =>
+    invoke<ConsoleLine[]>("subscribe_console", { id }),
+  sendConsoleCommand: (id: string, command: string) =>
+    invoke<void>("send_console_command", { id, command }),
   getSystemStats: () => invoke<SystemStats>("get_system_stats"),
   getServerStats: (id: string, pid: number) =>
     invoke<ServerStats | null>("get_server_stats", { id, pid }),
@@ -28,6 +37,21 @@ export const api = {
     invoke<void>("restore_backup", { backupId, restoreDir }),
   deleteBackup: (backupId: string, deleteFile = true) =>
     invoke<void>("delete_backup", { backupId, deleteFile }),
+  listMods: (serverId: string) => invoke<ModDto[]>("list_mods", { serverId }),
+  validateJar: (path: string) => invoke<boolean>("validate_jar", { path }),
+  installMod: (serverId: string, sourcePath: string, modsDir: string) =>
+    invoke<ModDto>("install_mod", { serverId, sourcePath, modsDir }),
+  removeMod: (modId: string) => invoke<void>("remove_mod", { modId }),
+  listModpacks: (serverId: string) =>
+    invoke<ModpackDto[]>("list_modpacks", { serverId }),
+  installModpack: (serverId: string, sourcePath: string, installDir: string) =>
+    invoke<InstallSummaryDto>("install_modpack", {
+      serverId,
+      sourcePath,
+      installDir,
+    }),
+  deleteModpack: (modpackId: string) =>
+    invoke<void>("delete_modpack", { modpackId }),
   suggestFreePort: () => invoke<number>("suggest_free_port"),
   // Network / Tailscale
   tailscaleIsInstalled: () => invoke<boolean>("tailscale_is_installed"),

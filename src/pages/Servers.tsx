@@ -9,6 +9,7 @@ interface Props {
   onRefresh: () => void;
   onStart: (id: string) => Promise<void>;
   onStop: (id: string) => Promise<void>;
+  onRestart: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onCreate: (form: CreateServerForm) => Promise<void>;
   onConsole: (server: Server) => void;
@@ -22,6 +23,7 @@ export function Servers({
   onRefresh: _onRefresh,
   onStart,
   onStop,
+  onRestart,
   onDelete,
   onCreate,
   onConsole,
@@ -68,6 +70,7 @@ export function Servers({
               loading={loadingId === s.id}
               onStart={(id) => withLoading(id, () => onStart(id))}
               onStop={(id) => withLoading(id, () => onStop(id))}
+              onRestart={(id) => withLoading(id, () => onRestart(id))}
               onDelete={(id) => withLoading(id, () => onDelete(id))}
               onConsole={() => onConsole(s)}
               onBackups={() => onBackups(s)}

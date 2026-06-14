@@ -68,3 +68,32 @@ export interface BackupDto {
   size_bytes: number;
   created_at: string;
 }
+
+export interface ModDto {
+  id: string;
+  server_id: string;
+  file_name: string;
+  path: string;
+}
+
+export interface ModpackDto {
+  id: string;
+  server_id: string;
+  name: string;
+  format: string;
+  source_path: string;
+}
+
+export interface InstallSummaryDto {
+  modpack: ModpackDto;
+  total_files: number;
+  downloaded: number;
+  skipped: number;
+  loader_info: string | null;
+}
+
+export interface ConsoleLine {
+  server_id: string;
+  is_stdout: boolean;
+  text: string;
+}

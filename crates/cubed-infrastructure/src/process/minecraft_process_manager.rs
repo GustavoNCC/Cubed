@@ -84,6 +84,52 @@ impl MinecraftProcessManager {
             .insert(server_id, ManagedProcess { pid, child });
         Ok((pid, stdin, stdout, stderr))
     }
+
+    pub async fn spawn_script_with_io(
+        &self,
+        server_id: Uuid,
+        script_path: &str,
+        work_dir: &str,
+    ) -> ApplicationResult<(
+        u32,
+        tokio::process::ChildStdin,
+        tokio::process::ChildStdout,
+        tokio::process::ChildStderr,
+    )> {
+        let mut child = Command::new("sh")
+            .arg(script_path)
+            .current_dir(work_dir)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| {
+                ApplicationError::Infrastructure(format!("No se pudo iniciar el script: {}", e))
+            })?;
+
+        let pid = child.id().ok_or_else(|| {
+            ApplicationError::Infrastructure("No se pudo obtener el PID del proceso".into())
+        })?;
+
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| ApplicationError::Infrastructure("No se pudo capturar stdin".into()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| ApplicationError::Infrastructure("No se pudo capturar stdout".into()))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| ApplicationError::Infrastructure("No se pudo capturar stderr".into()))?;
+
+        self.processes
+            .lock()
+            .await
+            .insert(server_id, ManagedProcess { pid, child });
+        Ok((pid, stdin, stdout, stderr))
+    }
 }
 
 impl Default for MinecraftProcessManager {

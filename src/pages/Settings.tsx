@@ -85,19 +85,19 @@ export function Settings() {
           label="Servidores"
           value={form.servers_dir}
           onChange={field("servers_dir")}
-          placeholder="/home/cubed/servers"
+          placeholder="/home/usuario/.local/share/cubed/servers"
         />
         <Field
           label="Backups"
           value={form.backups_dir}
           onChange={field("backups_dir")}
-          placeholder="/home/cubed/backups"
+          placeholder="/home/usuario/.local/share/cubed/backups"
         />
         <Field
           label="Descargas"
           value={form.downloads_dir}
           onChange={field("downloads_dir")}
-          placeholder="/home/cubed/downloads"
+          placeholder="/home/usuario/.local/share/cubed/downloads"
         />
       </Section>
 
