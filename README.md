@@ -20,6 +20,9 @@ por completo en la máquina del usuario.
 La arquitectura sigue **Clean Architecture + DDD + SOLID**. Ver
 [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
+📖 **Referencia técnica completa** (qué hace cada parte y cómo, rutas, comandos,
+ciclo de vida, causas raíz históricas): [`docs/REFERENCE.md`](./docs/REFERENCE.md).
+
 ## Estado
 
 Version 1.0
