@@ -290,6 +290,26 @@ async fn start_loaded_server(
         ));
     }
 
+    // Aceptar EULA automáticamente — todos los servidores Minecraft la requieren y salen
+    // inmediatamente en el primer arranque si eula.txt no existe o dice eula=false.
+    let eula_path = Path::new(&work_dir).join("eula.txt");
+    if !eula_path.exists() {
+        if let Err(e) = tokio::fs::write(&eula_path, "eula=true\n").await {
+            warn!(server_id = %uuid, error = %e, "no se pudo escribir eula.txt");
+        } else {
+            info!(server_id = %uuid, "eula.txt creado automáticamente");
+        }
+    }
+
+    info!(
+        server_id = %uuid,
+        java_path = %server.java_path(),
+        work_dir = %work_dir,
+        has_script,
+        has_jar,
+        "iniciando servidor"
+    );
+
     // Domain transition → Starting
     server.start().map_err(|e| e.to_string())?;
     state.repo.save(&server).await.map_err(|e| e.to_string())?;
@@ -404,13 +424,19 @@ async fn start_loaded_server(
                 let _ = srv.mark_offline();
                 let _ = repo_w.save(&srv).await;
                 eb_w.emit(CubedEvent::ServerStopped { server_id: uuid });
+                info!(server_id = %uuid, was_running, was_stopping, "proceso terminó → Offline");
             } else {
                 // Never reached Running → Crashed
                 srv.mark_crashed();
                 let _ = repo_w.save(&srv).await;
                 eb_w.emit(CubedEvent::ServerCrashed { server_id: uuid });
+                warn!(
+                    server_id = %uuid,
+                    was_running,
+                    was_stopping,
+                    "proceso terminó sin llegar a Running → Crashed (revisar consola para causa)"
+                );
             }
-            info!(server_id = %uuid, "process exited, status updated");
         }
     });
 
@@ -670,7 +696,7 @@ async fn write_loader_start_script(work_dir: &str, java_path: &str) -> Result<()
         .and_then(|p| p.to_str())
         .unwrap_or("");
     let content = format!(
-        "#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexport PATH='{}':\"$PATH\"\nexec sh ./run.sh nogui\n",
+        "#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexport PATH='{}':\"$PATH\"\nexec sh ./run.sh --nogui\n",
         shell_single_quote(java_dir)
     );
     tokio::fs::write(&script_path, content)
