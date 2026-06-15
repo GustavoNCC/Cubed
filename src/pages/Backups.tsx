@@ -63,7 +63,7 @@ export function Backups({ server, onBack }: Props) {
       await invoke("create_backup", {
         serverId: server.id,
         serverName: server.name,
-        serverDir: `/tmp/cubed-dev/servers/${server.name}`,
+        serverDir: server.work_dir,
       });
       await refresh();
     } catch (e) {
@@ -92,7 +92,7 @@ export function Backups({ server, onBack }: Props) {
     setError(null);
     setInfo(null);
     try {
-      const restoreDir = `/tmp/cubed-dev/servers/${server.name}_restored`;
+      const restoreDir = `${server.work_dir}_restored`;
       await invoke("restore_backup", { backupId: id, restoreDir });
       setInfo(`Backup restaurado en: ${restoreDir}`);
     } catch (e) {

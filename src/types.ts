@@ -12,6 +12,8 @@ export interface Server {
   software: string;
   port: number;
   status: ServerStatus;
+  /** Ruta absoluta al directorio del servidor en disco. Fuente de verdad única. */
+  work_dir: string;
 }
 
 export interface CreateServerForm {
@@ -53,6 +55,7 @@ export interface JavaInstallationDto {
 }
 
 export interface SettingsDto {
+  memory_mb: number;
   servers_dir: string;
   backups_dir: string;
   downloads_dir: string;

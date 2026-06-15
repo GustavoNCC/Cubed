@@ -35,6 +35,9 @@ pub struct ServerDto {
     pub software: String,
     pub port: u16,
     pub status: String,
+    /// Ruta absoluta al directorio de trabajo del servidor en disco.
+    /// Fuente de verdad que deben usar Mods, Backups, Modpacks y Consola.
+    pub work_dir: String,
 }
 
 #[derive(Deserialize)]
@@ -96,12 +99,13 @@ pub struct AppState {
 
 #[tauri::command]
 pub async fn list_servers(state: State<'_, AppState>) -> Result<Vec<ServerDto>, String> {
+    let servers_dir = state.settings.read().await.servers_dir.clone();
     state
         .repo
         .find_all()
         .await
         .map_err(|e| e.to_string())
-        .map(|v| v.iter().map(server_to_dto).collect())
+        .map(|v| v.iter().map(|s| server_to_dto(s, &servers_dir)).collect())
 }
 
 #[tauri::command]
@@ -187,7 +191,7 @@ pub async fn create_server(
     }
 
     info!(server_id = %server.id(), name = %server.name(), "server created");
-    Ok(server_to_dto(&server))
+    Ok(server_to_dto(&server, &servers_dir))
 }
 
 #[tauri::command]
@@ -266,7 +270,14 @@ async fn start_loaded_server(
     mut server: cubed_domain::entities::Server,
 ) -> Result<ServerDto, String> {
     let uuid = server.id();
-    let servers_dir = state.settings.read().await.servers_dir.clone();
+    let (servers_dir, memory_mb) = {
+        let s = state.settings.read().await;
+        (s.servers_dir.clone(), s.memory_mb)
+    };
+    // Validar límites de RAM (sólo aplica a servidores jar sin run.sh).
+    if let Err(e) = cubed_domain::entities::Settings::validate_memory_mb(memory_mb) {
+        return Err(e);
+    }
     let work_dir = format!("{}/{}", servers_dir, server.name());
     let jar_path = format!("{}/server.jar", work_dir);
     let script_path = format!("{}/cubed-start.sh", work_dir);
@@ -357,7 +368,7 @@ async fn start_loaded_server(
     } else {
         state
             .process_mgr
-            .spawn_with_io(uuid, &java_path, &jar_path, &work_dir, 2048)
+            .spawn_with_io(uuid, &java_path, &jar_path, &work_dir, memory_mb)
             .await
     };
     let (pid, stdin, stdout, stderr) = match spawned {
@@ -468,7 +479,7 @@ async fn start_loaded_server(
         }
     });
 
-    Ok(server_to_dto(&server))
+    Ok(server_to_dto(&server, &servers_dir))
 }
 
 #[tauri::command]
@@ -497,7 +508,8 @@ pub async fn stop_server(id: String, state: State<'_, AppState>) -> Result<Serve
         .event_bus
         .emit(CubedEvent::ServerStopped { server_id: uuid });
     info!(server_id = %uuid, "server stop requested");
-    Ok(server_to_dto(&server))
+    let servers_dir = state.settings.read().await.servers_dir.clone();
+    Ok(server_to_dto(&server, &servers_dir))
 }
 
 #[tauri::command]
@@ -601,7 +613,7 @@ pub async fn get_console_tail(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn server_to_dto(s: &cubed_domain::entities::Server) -> ServerDto {
+fn server_to_dto(s: &cubed_domain::entities::Server, servers_dir: &str) -> ServerDto {
     ServerDto {
         id: s.id().to_string(),
         name: s.name().to_string(),
@@ -616,6 +628,7 @@ fn server_to_dto(s: &cubed_domain::entities::Server) -> ServerDto {
             ServerStatus::Crashed => "crashed",
         }
         .to_string(),
+        work_dir: format!("{}/{}", servers_dir, s.name()),
     }
 }
 
@@ -1246,8 +1259,9 @@ pub struct SettingsDto {
     pub backups_dir: String,
     pub downloads_dir: String,
     pub default_java_path: String,
-    /// Intervalo de backup automático en segundos (0 = desactivado).
     pub backup_interval_secs: u64,
+    /// RAM asignada a servidores jar (MB). Rango válido: 4096–12288.
+    pub memory_mb: u32,
 }
 
 #[derive(Deserialize)]
@@ -1257,6 +1271,8 @@ pub struct SaveSettingsCmd {
     pub downloads_dir: String,
     pub default_java_path: String,
     pub backup_interval_secs: u64,
+    #[serde(default = "cubed_domain::entities::Settings::default_memory_mb")]
+    pub memory_mb: u32,
 }
 
 #[tauri::command]
@@ -1268,6 +1284,7 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsDto, Str
         downloads_dir: s.downloads_dir.clone(),
         default_java_path: s.default_java_path.clone(),
         backup_interval_secs: s.backup_interval_secs,
+        memory_mb: s.memory_mb,
     })
 }
 
@@ -1288,6 +1305,7 @@ pub async fn save_settings(
     if cmd.default_java_path.trim().is_empty() {
         return Err("La ruta de Java por defecto no puede estar vacía".into());
     }
+    cubed_domain::entities::Settings::validate_memory_mb(cmd.memory_mb)?;
 
     let next = Settings {
         servers_dir: cmd.servers_dir.trim().to_string(),
@@ -1295,6 +1313,7 @@ pub async fn save_settings(
         downloads_dir: cmd.downloads_dir.trim().to_string(),
         default_java_path: cmd.default_java_path.trim().to_string(),
         backup_interval_secs: cmd.backup_interval_secs,
+        memory_mb: cmd.memory_mb,
     };
 
     ensure_storage_dir("servidores", &next.servers_dir).await?;
@@ -1313,7 +1332,6 @@ pub async fn save_settings(
         *s = next;
     }
 
-    // Reschedule automatic backup with the new interval
     {
         let s = state.settings.read().await;
         state
@@ -1322,7 +1340,8 @@ pub async fn save_settings(
             .await;
         info!(
             interval_secs = s.backup_interval_secs,
-            "backup scheduler updated"
+            memory_mb = s.memory_mb,
+            "settings updated"
         );
     }
 
@@ -1333,6 +1352,7 @@ pub async fn save_settings(
         downloads_dir: s.downloads_dir.clone(),
         default_java_path: s.default_java_path.clone(),
         backup_interval_secs: s.backup_interval_secs,
+        memory_mb: s.memory_mb,
     })
 }
 

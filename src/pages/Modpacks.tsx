@@ -88,7 +88,7 @@ export function Modpacks({ server, onBack }: Props) {
     });
 
     try {
-      const installDir = `/tmp/cubed-dev/servers/${server.name}`;
+      const installDir = server.work_dir;
       const result = await invoke<InstallSummaryDto>("install_modpack", {
         serverId: server.id,
         sourcePath,

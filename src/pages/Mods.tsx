@@ -66,7 +66,7 @@ export function Mods({ server, onBack }: Props) {
         setError("El archivo no es un JAR válido.");
         return;
       }
-      const modsDir = `/tmp/cubed-dev/servers/${server.name}/mods`;
+      const modsDir = `${server.work_dir}/mods`;
       await invoke("install_mod", { serverId: server.id, sourcePath, modsDir });
       await refresh();
       setInfo("Mod instalado correctamente.");

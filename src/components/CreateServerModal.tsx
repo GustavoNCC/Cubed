@@ -77,10 +77,11 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
   const [showJavaPicker, setShowJavaPicker] = useState(false);
   const versionDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-suggest port on mount
+  // Al montar: sugerir puerto, detectar Java y cargar servers_dir real desde settings
   useEffect(() => {
     suggestPort();
     detectJava(DEFAULTS.version);
+    api.getSettings().then((s) => set("servers_dir", s.servers_dir)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

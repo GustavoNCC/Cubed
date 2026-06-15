@@ -20,6 +20,7 @@ impl SettingsRow {
             downloads_dir: self.downloads_dir,
             default_java_path: self.default_java_path,
             backup_interval_secs: self.backup_interval_secs.max(0) as u64,
+            memory_mb: Settings::default_memory_mb(),
         }
     }
 }
