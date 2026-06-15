@@ -163,7 +163,7 @@ async fn forge_url(client: &Client, mc: &str) -> ApplicationResult<String> {
 
     let full = format!("{}-{}", mc, forge_ver);
     Ok(format!(
-        "https://files.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar",
+        "https://maven.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar",
         full, full
     ))
 }
