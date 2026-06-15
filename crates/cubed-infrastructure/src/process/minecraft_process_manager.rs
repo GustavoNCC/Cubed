@@ -287,10 +287,17 @@ mod tests {
             .await
             .insert(id, ManagedProcess { pid, child });
 
-        // Espera a que termine
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // Espera a que termine sin depender de un timing fijo bajo carga.
+        let mut alive = true;
+        for _ in 0..20 {
+            alive = mgr.is_alive(id).await.unwrap();
+            if !alive {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
 
-        assert!(!mgr.is_alive(id).await.unwrap());
+        assert!(!alive);
         // Tras is_alive=false el proceso se elimina del mapa
         assert!(mgr.list_active().is_empty());
     }

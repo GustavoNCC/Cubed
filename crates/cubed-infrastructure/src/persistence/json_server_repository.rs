@@ -80,7 +80,10 @@ fn parse_software(s: &str) -> ApplicationResult<ServerSoftware> {
 
 fn parse_status(s: &str) -> ApplicationResult<ServerStatus> {
     match s {
-        "offline" | "starting" | "running" | "stopping" => Ok(ServerStatus::Offline),
+        "offline" => Ok(ServerStatus::Offline),
+        "starting" => Ok(ServerStatus::Starting),
+        "running" => Ok(ServerStatus::Running),
+        "stopping" => Ok(ServerStatus::Stopping),
         "crashed" => Ok(ServerStatus::Crashed),
         other => Err(ApplicationError::Infrastructure(format!(
             "Estado desconocido: '{other}'"
@@ -317,7 +320,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn status_normalised_to_offline_on_reload() {
+    async fn status_is_preserved_on_reload() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("servers.json");
 
@@ -327,10 +330,11 @@ mod tests {
         s.mark_running().unwrap();
         repo.save(&s).await.unwrap();
 
-        // On reload, Running must be normalised to Offline
+        // Startup reconciliation happens in the Tauri app bootstrap; the
+        // repository must preserve current runtime state during normal reads.
         let repo2 = JsonServerRepository::new(path);
         let reloaded = repo2.find_all().await.unwrap();
         use cubed_domain::entities::ServerStatus;
-        assert_eq!(reloaded[0].status(), &ServerStatus::Offline);
+        assert_eq!(reloaded[0].status(), &ServerStatus::Running);
     }
 }
