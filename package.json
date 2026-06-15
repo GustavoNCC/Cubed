@@ -1,6 +1,6 @@
 {
   "name": "cubed",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "description": "Plataforma local de administración de servidores Minecraft para Ubuntu Linux",

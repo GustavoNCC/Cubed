@@ -40,28 +40,58 @@ function App() {
   });
 
   async function handleCreate(form: CreateServerForm) {
-    const server = await api.createServer(form);
-    setServers((prev) => [...prev, server]);
+    try {
+      const server = await api.createServer(form);
+      setServers((prev) => [...prev, server]);
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+      await refresh();
+    }
   }
 
   async function handleStart(id: string) {
-    const updated = await api.startServer(id);
-    setServers((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    try {
+      const updated = await api.startServer(id);
+      setServers((prev) => prev.map((s) => (s.id === id ? updated : s)));
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+      await refresh();
+    }
   }
 
   async function handleStop(id: string) {
-    const updated = await api.stopServer(id);
-    setServers((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    try {
+      const updated = await api.stopServer(id);
+      setServers((prev) => prev.map((s) => (s.id === id ? updated : s)));
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+      await refresh();
+    }
   }
 
   async function handleRestart(id: string) {
-    const updated = await api.restartServer(id);
-    setServers((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    try {
+      const updated = await api.restartServer(id);
+      setServers((prev) => prev.map((s) => (s.id === id ? updated : s)));
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+      await refresh();
+    }
   }
 
   async function handleDelete(id: string) {
-    await api.deleteServer(id);
-    setServers((prev) => prev.filter((s) => s.id !== id));
+    try {
+      await api.deleteServer(id);
+      setServers((prev) => prev.filter((s) => s.id !== id));
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+      await refresh();
+    }
   }
 
   return (

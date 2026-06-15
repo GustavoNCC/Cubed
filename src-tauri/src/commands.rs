@@ -316,9 +316,20 @@ async fn start_loaded_server(
         info!(server_id = %uuid, resolved = %java_path, "Java resuelto difiere del guardado");
     }
 
-    // Reject early if no launch target is available
-    let has_script = Path::new(&script_path).exists();
-    let has_jar = Path::new(&jar_path).exists();
+    let mut has_script = Path::new(&script_path).exists();
+    let mut has_jar = Path::new(&jar_path).exists();
+    if !has_script && !has_jar {
+        warn!(
+            server_id = %uuid,
+            work_dir = %work_dir,
+            "runtime no encontrado al iniciar; intentando reconstruir descarga"
+        );
+        ensure_server_runtime(state, &server, &work_dir, &java_path).await?;
+        has_script = Path::new(&script_path).exists();
+        has_jar = Path::new(&jar_path).exists();
+    }
+
+    // Reject early if no launch target is available after recovery
     if !has_script && !has_jar {
         return Err(format!(
             "No se encontró un runtime arrancable en '{}'. Descarga el servidor primero.",
@@ -332,6 +343,9 @@ async fn start_loaded_server(
         if let Err(e) = write_loader_start_script(&work_dir, &java_path).await {
             warn!(server_id = %uuid, error = %e, "no se pudo regenerar cubed-start.sh");
         }
+        if let Err(e) = ensure_loader_memory_args(&work_dir, memory_mb).await {
+            warn!(server_id = %uuid, error = %e, "no se pudo asegurar memoria del loader");
+        }
     }
 
     // Aceptar EULA automáticamente — todos los servidores Minecraft la requieren y salen
@@ -344,6 +358,8 @@ async fn start_loaded_server(
             info!(server_id = %uuid, "eula.txt creado automáticamente");
         }
     }
+
+    ensure_server_properties_port(&work_dir, server.port().value()).await?;
 
     info!(
         server_id = %uuid,
@@ -730,6 +746,32 @@ async fn prepare_installer_based_server(
     ))
 }
 
+async fn ensure_server_runtime(
+    state: &AppState,
+    server: &cubed_domain::entities::Server,
+    work_dir: &str,
+    java_path: &str,
+) -> Result<(), String> {
+    let settings = state.settings.read().await;
+    state
+        .fs
+        .init_server_dirs(&settings.servers_dir, server.name().as_str())
+        .await
+        .map_err(|e| e.to_string())?;
+    drop(settings);
+
+    let downloaded = DownloadServerJar::new(state.downloader.clone())
+        .execute(server.software(), server.version().as_str(), work_dir)
+        .await
+        .map_err(|e| format!("No se pudo descargar el runtime faltante: {}", e))?;
+
+    prepare_downloaded_server(server.software(), java_path, work_dir, &downloaded.path)
+        .await
+        .map_err(|e| format!("No se pudo preparar el runtime faltante: {}", e))?;
+
+    ensure_server_properties_port(work_dir, server.port().value()).await
+}
+
 async fn write_loader_start_script(work_dir: &str, java_path: &str) -> Result<(), String> {
     let script_path = Path::new(work_dir).join("cubed-start.sh");
     let java_dir = Path::new(java_path)
@@ -755,6 +797,95 @@ async fn write_loader_start_script(work_dir: &str, java_path: &str) -> Result<()
         tokio::fs::set_permissions(&script_path, permissions)
             .await
             .map_err(|e| format!("No se pudo hacer ejecutable cubed-start.sh: {}", e))?;
+    }
+
+    Ok(())
+}
+
+async fn ensure_server_properties_port(work_dir: &str, port: u16) -> Result<(), String> {
+    let properties_path = Path::new(work_dir).join("server.properties");
+    let port_line = format!("server-port={}", port);
+
+    let existing = match tokio::fs::read_to_string(&properties_path).await {
+        Ok(existing) => existing,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            tokio::fs::write(&properties_path, format!("{}\n", port_line))
+                .await
+                .map_err(|e| format!("No se pudo crear server.properties: {}", e))?;
+            return Ok(());
+        }
+        Err(e) => return Err(format!("No se pudo leer server.properties: {}", e)),
+    };
+
+    let mut found_active_port = false;
+    let mut lines = Vec::new();
+    for line in existing.lines() {
+        let trimmed = line.trim_start();
+        if !trimmed.starts_with('#')
+            && !trimmed.starts_with('!')
+            && trimmed.starts_with("server-port=")
+        {
+            if !found_active_port {
+                lines.push(port_line.clone());
+                found_active_port = true;
+            }
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+
+    if !found_active_port {
+        lines.push(port_line);
+    }
+
+    let mut next = lines.join("\n");
+    next.push('\n');
+    if next != existing {
+        tokio::fs::write(&properties_path, next)
+            .await
+            .map_err(|e| format!("No se pudo actualizar server.properties: {}", e))?;
+    }
+
+    Ok(())
+}
+
+async fn ensure_loader_memory_args(work_dir: &str, memory_mb: u32) -> Result<(), String> {
+    let args_path = Path::new(work_dir).join("user_jvm_args.txt");
+    let min_mb = (memory_mb / 2).max(512);
+    let default_args = format!(
+        "# Managed by Cubed. Edit this file to tune server RAM.\n-Xms{}M\n-Xmx{}M\n",
+        min_mb, memory_mb
+    );
+
+    let existing = match tokio::fs::read_to_string(&args_path).await {
+        Ok(existing) => existing,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            tokio::fs::write(&args_path, default_args)
+                .await
+                .map_err(|e| format!("No se pudo crear user_jvm_args.txt: {}", e))?;
+            return Ok(());
+        }
+        Err(e) => return Err(format!("No se pudo leer user_jvm_args.txt: {}", e)),
+    };
+
+    let has_heap_limit = existing
+        .lines()
+        .map(str::trim)
+        .any(|line| !line.starts_with('#') && line.starts_with("-Xmx"));
+    if !has_heap_limit {
+        let next = if existing.trim().is_empty() {
+            default_args
+        } else {
+            format!(
+                "{}\n# Managed by Cubed. Edit these values to tune server RAM.\n-Xms{}M\n-Xmx{}M\n",
+                existing.trim_end(),
+                min_mb,
+                memory_mb
+            )
+        };
+        tokio::fs::write(&args_path, next)
+            .await
+            .map_err(|e| format!("No se pudo actualizar user_jvm_args.txt: {}", e))?;
     }
 
     Ok(())
@@ -1416,5 +1547,42 @@ mod tests {
             .unwrap();
 
         assert!(target.is_dir());
+    }
+
+    #[tokio::test]
+    async fn server_properties_port_is_created_for_non_default_port() {
+        let dir = tempfile::tempdir().unwrap();
+
+        ensure_server_properties_port(dir.path().to_str().unwrap(), 25566)
+            .await
+            .unwrap();
+
+        let properties = tokio::fs::read_to_string(dir.path().join("server.properties"))
+            .await
+            .unwrap();
+        assert_eq!(properties, "server-port=25566\n");
+    }
+
+    #[tokio::test]
+    async fn server_properties_port_is_updated_without_losing_existing_properties() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("server.properties");
+        tokio::fs::write(
+            &path,
+            "#Minecraft server properties\nmotd=Cubed\nserver-port=25565\nview-distance=10\n",
+        )
+        .await
+        .unwrap();
+
+        ensure_server_properties_port(dir.path().to_str().unwrap(), 25566)
+            .await
+            .unwrap();
+
+        let properties = tokio::fs::read_to_string(path).await.unwrap();
+        assert!(properties.contains("#Minecraft server properties\n"));
+        assert!(properties.contains("motd=Cubed\n"));
+        assert!(properties.contains("server-port=25566\n"));
+        assert!(properties.contains("view-distance=10\n"));
+        assert!(!properties.contains("server-port=25565\n"));
     }
 }
