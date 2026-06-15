@@ -28,7 +28,7 @@ impl Settings {
     }
 
     pub fn validate_memory_mb(mb: u32) -> Result<(), String> {
-        if mb < MEMORY_MB_MIN || mb > MEMORY_MB_MAX {
+        if !(MEMORY_MB_MIN..=MEMORY_MB_MAX).contains(&mb) {
             return Err(format!(
                 "La RAM debe estar entre {} MB (4 GB) y {} MB (12 GB), se recibió {} MB",
                 MEMORY_MB_MIN, MEMORY_MB_MAX, mb

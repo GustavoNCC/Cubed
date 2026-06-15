@@ -81,7 +81,10 @@ export function CreateServerModal({ onClose, onCreate }: Props) {
   useEffect(() => {
     suggestPort();
     detectJava(DEFAULTS.version);
-    api.getSettings().then((s) => set("servers_dir", s.servers_dir)).catch(() => {});
+    api
+      .getSettings()
+      .then((s) => set("servers_dir", s.servers_dir))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
