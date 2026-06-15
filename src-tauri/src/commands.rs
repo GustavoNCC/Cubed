@@ -270,15 +270,40 @@ async fn start_loaded_server(
     let work_dir = format!("{}/{}", servers_dir, server.name());
     let jar_path = format!("{}/server.jar", work_dir);
     let script_path = format!("{}/cubed-start.sh", work_dir);
-    let java = state
-        .java_mgr
-        .inspect(server.java_path().as_str())
-        .await
-        .map_err(|e| e.to_string())?;
-    state
-        .java_mgr
-        .validate_compatibility(&java, server.version().as_str())
-        .map_err(|e| e.to_string())?;
+    // Resolver Java de forma robusta: primero el guardado en el servidor; si ya no
+    // resuelve o es incompatible, caer en autodetección del sistema. Así un servidor
+    // creado con un Java que luego cambió de ruta sigue arrancando en lugar de fallar
+    // en silencio.
+    let stored_path = server.java_path().as_str().to_string();
+    let version = server.version().as_str().to_string();
+    let java = match state.java_mgr.inspect(&stored_path).await {
+        Ok(java)
+            if state
+                .java_mgr
+                .validate_compatibility(&java, &version)
+                .is_ok() =>
+        {
+            java
+        }
+        other => {
+            if let Err(e) = &other {
+                warn!(server_id = %uuid, java_path = %stored_path, error = %e,
+                    "Java guardado no resolvió; autodetectando uno compatible");
+            } else {
+                warn!(server_id = %uuid, java_path = %stored_path,
+                    "Java guardado incompatible con {version}; autodetectando uno compatible");
+            }
+            state
+                .java_mgr
+                .select_for_version(&version)
+                .await
+                .map_err(|e| e.to_string())?
+        }
+    };
+    let java_path = java.path.clone();
+    if java_path != stored_path {
+        info!(server_id = %uuid, resolved = %java_path, "Java resuelto difiere del guardado");
+    }
 
     // Reject early if no launch target is available
     let has_script = Path::new(&script_path).exists();
@@ -288,6 +313,14 @@ async fn start_loaded_server(
             "No se encontró un runtime arrancable en '{}'. Descarga el servidor primero.",
             work_dir
         ));
+    }
+
+    // Asegurar que el script de arranque apunta al Java resuelto (run.sh invoca `java`
+    // a secas, por lo que depende del PATH que exporta cubed-start.sh).
+    if has_script {
+        if let Err(e) = write_loader_start_script(&work_dir, &java_path).await {
+            warn!(server_id = %uuid, error = %e, "no se pudo regenerar cubed-start.sh");
+        }
     }
 
     // Aceptar EULA automáticamente — todos los servidores Minecraft la requieren y salen
@@ -303,7 +336,8 @@ async fn start_loaded_server(
 
     info!(
         server_id = %uuid,
-        java_path = %server.java_path(),
+        java_path = %java_path,
+        java_version = java.major_version,
         work_dir = %work_dir,
         has_script,
         has_jar,
@@ -323,13 +357,7 @@ async fn start_loaded_server(
     } else {
         state
             .process_mgr
-            .spawn_with_io(
-                uuid,
-                server.java_path().as_str(),
-                &jar_path,
-                &work_dir,
-                2048,
-            )
+            .spawn_with_io(uuid, &java_path, &jar_path, &work_dir, 2048)
             .await
     };
     let (pid, stdin, stdout, stderr) = match spawned {
