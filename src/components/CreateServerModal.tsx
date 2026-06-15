@@ -62,7 +62,7 @@ const DEFAULTS: CreateServerForm = {
   software: "Paper",
   port: 25565,
   java_path: "/usr/bin/java",
-  servers_dir: "/tmp/cubed-dev/servers",
+  servers_dir: "",
 };
 
 export function CreateServerModal({ onClose, onCreate }: Props) {

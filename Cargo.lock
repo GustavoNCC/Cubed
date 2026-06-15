@@ -665,7 +665,7 @@ dependencies = [
 
 [[package]]
 name = "cubed"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "async-trait",
  "cubed-application",
@@ -686,7 +686,7 @@ dependencies = [
 
 [[package]]
 name = "cubed-application"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "async-trait",
  "cubed-domain",
@@ -698,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "cubed-domain"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "chrono",
  "serde",
@@ -708,7 +708,7 @@ dependencies = [
 
 [[package]]
 name = "cubed-infrastructure"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "async-trait",
  "chrono",
