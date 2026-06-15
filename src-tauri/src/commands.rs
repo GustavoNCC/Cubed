@@ -275,9 +275,7 @@ async fn start_loaded_server(
         (s.servers_dir.clone(), s.memory_mb)
     };
     // Validar límites de RAM (sólo aplica a servidores jar sin run.sh).
-    if let Err(e) = cubed_domain::entities::Settings::validate_memory_mb(memory_mb) {
-        return Err(e);
-    }
+    cubed_domain::entities::Settings::validate_memory_mb(memory_mb)?;
     let work_dir = format!("{}/{}", servers_dir, server.name());
     let jar_path = format!("{}/server.jar", work_dir);
     let script_path = format!("{}/cubed-start.sh", work_dir);
