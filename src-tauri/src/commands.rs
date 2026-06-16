@@ -100,12 +100,44 @@ pub struct AppState {
 #[tauri::command]
 pub async fn list_servers(state: State<'_, AppState>) -> Result<Vec<ServerDto>, String> {
     let servers_dir = state.settings.read().await.servers_dir.clone();
-    state
-        .repo
-        .find_all()
-        .await
-        .map_err(|e| e.to_string())
-        .map(|v| v.iter().map(|s| server_to_dto(s, &servers_dir)).collect())
+    let mut servers = state.repo.find_all().await.map_err(|e| e.to_string())?;
+
+    for server in &mut servers {
+        if matches!(
+            server.status(),
+            ServerStatus::Starting | ServerStatus::Running | ServerStatus::Stopping
+        ) && !state
+            .process_mgr
+            .is_alive(server.id())
+            .await
+            .unwrap_or(false)
+        {
+            let previous = server.status().clone();
+            if previous == ServerStatus::Starting {
+                server.mark_crashed();
+                state.event_bus.emit(CubedEvent::ServerCrashed {
+                    server_id: server.id(),
+                });
+            } else {
+                server.recover_as_offline();
+                state.event_bus.emit(CubedEvent::ServerStopped {
+                    server_id: server.id(),
+                });
+            }
+            state.repo.save(server).await.map_err(|e| e.to_string())?;
+            warn!(
+                server_id = %server.id(),
+                previous = %previous,
+                current = %server.status(),
+                "server state reconciled during list_servers"
+            );
+        }
+    }
+
+    Ok(servers
+        .iter()
+        .map(|s| server_to_dto(s, &servers_dir))
+        .collect())
 }
 
 #[tauri::command]
@@ -1003,7 +1035,8 @@ fn backup_to_dto(b: &cubed_domain::entities::Backup) -> BackupDto {
 }
 
 /// Crea un backup manual del servidor.
-/// `server_dir` debe ser la ruta absoluta al directorio del servidor.
+/// `server_dir` se conserva por compatibilidad con el frontend, pero la ruta
+/// efectiva se deriva desde la configuración persistida para evitar props stale.
 #[tauri::command]
 pub async fn create_backup(
     server_id: String,
@@ -1012,9 +1045,33 @@ pub async fn create_backup(
     state: State<'_, AppState>,
 ) -> Result<BackupDto, String> {
     let uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
+    let server = state
+        .repo
+        .find_by_id(uuid)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Servidor {} no encontrado", server_id))?;
+    let servers_dir = state.settings.read().await.servers_dir.clone();
+    let canonical_server_dir = format!("{}/{}", servers_dir, server.name());
+    if !server_dir.trim().is_empty() && server_dir != canonical_server_dir {
+        warn!(
+            server_id = %uuid,
+            requested = %server_dir,
+            canonical = %canonical_server_dir,
+            "backup requested with stale server_dir; using canonical path"
+        );
+    }
+    if server_name != server.name().as_str() {
+        warn!(
+            server_id = %uuid,
+            requested = %server_name,
+            canonical = %server.name(),
+            "backup requested with stale server_name; using canonical name"
+        );
+    }
     let backup = state
         .backup_mgr
-        .backup_server(uuid, &server_name, &server_dir)
+        .backup_server(uuid, server.name().as_str(), &canonical_server_dir)
         .await
         .map_err(|e| e.to_string())?;
     state.event_bus.emit(CubedEvent::BackupCreated {

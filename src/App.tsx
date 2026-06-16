@@ -33,6 +33,31 @@ function App() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      refresh();
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
+
+  useEffect(() => {
+    function syncSelected(
+      selected: Server | null,
+      setter: (server: Server | null) => void,
+    ) {
+      if (!selected) return;
+      const current = servers.find((s) => s.id === selected.id) ?? null;
+      if (current && current !== selected) {
+        setter(current);
+      }
+    }
+
+    syncSelected(consoleServer, setConsole);
+    syncSelected(backupServer, setBackups);
+    syncSelected(modsServer, setMods);
+    syncSelected(modpackServer, setModpacks);
+  }, [servers, consoleServer, backupServer, modsServer, modpackServer]);
+
   useAppEvents({
     onServerStarted: refresh,
     onServerStopped: refresh,

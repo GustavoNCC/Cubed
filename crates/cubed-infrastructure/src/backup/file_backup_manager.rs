@@ -49,6 +49,14 @@ impl FileBackupManager {
         server_dir: &str,
     ) -> ApplicationResult<Backup> {
         debug!(server_id = %server_id, server_dir, "starting backup");
+        let source = Path::new(server_dir);
+        if !source.is_dir() {
+            return Err(ApplicationError::Infrastructure(format!(
+                "No se puede crear backup: origen no existe o no es directorio. source={}",
+                source.display()
+            )));
+        }
+
         let ts = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let filename = format!("{}_{}.tar.gz", server_name, ts);
         let backups_dir = self.backups_dir.read().await.clone();
@@ -63,25 +71,38 @@ impl FileBackupManager {
         })?;
 
         // tar -czf <dest> -C <parent> <server_name>
-        let parent = Path::new(server_dir)
+        let parent = source
             .parent()
             .and_then(|p| p.to_str())
             .unwrap_or(server_dir);
-        let dir_name = Path::new(server_dir)
+        let dir_name = source
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or(server_dir);
 
-        let status = Command::new("tar")
+        let output = Command::new("tar")
             .args(["-czf", &dest, "-C", parent, dir_name])
-            .status()
+            .output()
             .await
             .map_err(|e| ApplicationError::Infrastructure(format!("tar falló: {}", e)))?;
 
-        if !status.success() {
+        if !output.status.success() {
+            let _ = fs::remove_file(&dest).await;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(ApplicationError::Infrastructure(format!(
-                "tar terminó con código {:?}",
-                status.code()
+                "tar terminó con código {:?}\ncmd: tar -czf {} -C {} {}\ncwd: {}\nsource: {}\ndest: {}\nstdout:\n{}\nstderr:\n{}",
+                output.status.code(),
+                dest,
+                parent,
+                dir_name,
+                std::env::current_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| "<desconocido>".into()),
+                source.display(),
+                dest,
+                stdout.trim_end(),
+                stderr.trim_end()
             )));
         }
 
@@ -116,17 +137,28 @@ impl FileBackupManager {
             ))
         })?;
 
-        let status = Command::new("tar")
+        let output = Command::new("tar")
             .args(["-xzf", backup.path(), "-C", restore_dir])
-            .status()
+            .output()
             .await
             .map_err(|e| ApplicationError::Infrastructure(format!("tar restore falló: {}", e)))?;
 
-        if !status.success() {
+        if !output.status.success() {
             warn!(backup_id = %backup_id, "tar restore failed");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(ApplicationError::Infrastructure(format!(
-                "tar restore terminó con código {:?}",
-                status.code()
+                "tar restore terminó con código {:?}\ncmd: tar -xzf {} -C {}\ncwd: {}\nsource: {}\ndest: {}\nstdout:\n{}\nstderr:\n{}",
+                output.status.code(),
+                backup.path(),
+                restore_dir,
+                std::env::current_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| "<desconocido>".into()),
+                backup.path(),
+                restore_dir,
+                stdout.trim_end(),
+                stderr.trim_end()
             )));
         }
         info!(backup_id = %backup_id, restore_dir, "backup restored");
@@ -234,11 +266,13 @@ mod tests {
         let result = mgr
             .backup_server(sid, "test-server", "/no/such/directory")
             .await;
-        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("origen no existe"));
+        assert!(err.contains("/no/such/directory"));
     }
 
     #[tokio::test]
-    async fn backup_real_dir_creates_file() {
+    async fn backup_real_dir_creates_file_and_restore_extracts_it() {
         use tempfile::tempdir;
         let dir = tempdir().unwrap();
         let src = dir.path().to_str().unwrap();
@@ -263,5 +297,15 @@ mod tests {
         // Verify persisted
         let found = repo.find_by_id(backup.id()).await.unwrap();
         assert!(found.is_some());
+
+        let restore_dir = tempdir().unwrap();
+        mgr.restore_backup(backup.id(), restore_dir.path().to_str().unwrap())
+            .await
+            .unwrap();
+        let restored = restore_dir
+            .path()
+            .join(dir.path().file_name().unwrap())
+            .join("world.dat");
+        assert_eq!(tokio::fs::read(restored).await.unwrap(), b"dummy");
     }
 }
