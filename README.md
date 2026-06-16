@@ -25,4 +25,4 @@ ciclo de vida, causas raíz históricas): [`docs/REFERENCE.md`](./docs/REFERENCE
 
 ## Estado
 
-Version 1.0
+Version 1.0.5

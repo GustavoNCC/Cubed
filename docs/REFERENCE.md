@@ -6,7 +6,7 @@
 > (gotchas) que ya causaron bugs. El objetivo es evitar repetir problemas resueltos.
 >
 > Mantener este archivo al día cuando se añadan comandos, rutas o entidades.
-> Última actualización: cobertura hasta la unificación de rutas + límites de RAM.
+> Última actualización: v1.0.5 (estabilización de estado de servidores y backups).
 
 Índice:
 
@@ -27,6 +27,7 @@
 15. [Red / Tailscale](#15-red--tailscale)
 16. [Inicialización de la app (composition root)](#16-inicialización-de-la-app-composition-root)
 17. [Gotchas y causas raíz históricas](#17-gotchas-y-causas-raíz-históricas)
+18. [Historial completo de errores corregidos (v1.0.0 → v1.0.5)](#18-historial-completo-de-errores-corregidos-v100--v105)
 
 ---
 
@@ -447,13 +448,171 @@ Lista de problemas ya resueltos. **No reintroducir.**
    `/tmp/cubed-dev/servers/...`. Resuelto con `work_dir` en el `ServerDto` como única
    fuente de verdad; el frontend nunca construye rutas.
 6. **RAM sin límites** → ahora 4–12 GB validado en frontend, al guardar y al arrancar.
+7. **Fallback a ruta legacy de servidores** (v1.0.4 → v1.0.5) → `CreateServerModal`
+   aún conservaba un valor por defecto hardcodeado de `servers_dir` como red de
+   seguridad. Eliminado: el directorio siempre se carga desde `api.getSettings()`,
+   sin fallback local.
+8. **Estado de servidor y backups inestables** (v1.0.5) → `commands.rs` y
+   `file_backup_manager.rs` tenían condiciones de carrera en la reconciliación de
+   estado y en la generación de backups con `tar`. Resuelto endureciendo la
+   reconciliación de estados (`App.tsx`/`commands.rs`) y la creación/validación de
+   backups (`file_backup_manager.rs`).
 
 ### Reglas para evitar repetir problemas
 - **Nunca** construir rutas de servidor en el frontend. Usar siempre `server.work_dir`.
 - **Nunca** depender de que el `java_path` guardado siga existiendo: resolver siempre.
 - **Nunca** asumir que `eula.txt` existe: escribirlo antes de arrancar.
 - **Nunca** usar `files.minecraftforge.net`: usar el maven.
+- **Nunca** dejar valores de ruta hardcodeados como fallback "por si falla" la carga
+  de Settings: si Settings falla, el error debe propagarse, no enmascararse con
+  `/tmp` u otra ruta legacy.
 - Toda nueva ruta o carpeta debe derivarse de Settings (`servers_dir`/`backups_dir`/
   `downloads_dir`) o de `work_dir`, jamás de `/tmp` ni rutas absolutas hardcodeadas.
 - Al añadir un comando: registrarlo en `lib.rs`, exponerlo en `api.ts`, y
   documentarlo en la tabla de §8.
+
+## 18. Historial completo de errores corregidos (v1.0.0 → v1.0.5)
+
+Registro exhaustivo de incidencias resueltas durante el desarrollo. Se mantiene
+como referencia para no reintroducir patrones ya descartados.
+
+### v1.0.0 — 51 errores corregidos
+
+**UI / UX**
+1. Layout roto en la vista de servidores (botones desalineados, acciones
+   saliéndose de la tarjeta, mala distribución con múltiples servidores, soporte
+   deficiente para nombres largos).
+2. Interfaz demasiado simple (apariencia genérica, sin identidad visual, baja
+   diferenciación entre estados).
+3. Estado visual incorrecto del servidor (corriendo pero la UI mostraba
+   "Iniciando").
+4. Dashboard desincronizado (servidores activos aparecían como "starting",
+   métricas no reflejaban el estado real).
+5. Botones desincronizados ("Iniciar" visible con el servidor ya activo,
+   "Detener" sin responder).
+
+**Gestión de servidores**
+6. Selección manual de puertos (riesgo de conflictos y duplicados).
+7. Ausencia de Port Manager (no detectaba puertos ocupados ni sugería libres).
+8. El servidor no iniciaba correctamente (se quedaba en "Iniciando" indefinido).
+9. Descarga de Forge rota (URLs antiguas, HTTP 404, imposible crear servidores
+   Forge).
+10. Detección de Java insuficiente (compatibilidad poco clara entre Java y MC).
+11. Configuración de RAM sin restricciones (valores peligrosos para el sistema).
+
+**Persistencia**
+12. Servidores desaparecían al cerrar Cubed (sin persistencia adecuada, no
+    sobrevivían al reinicio).
+13. Configuración parcialmente temporal (datos en directorios temporales).
+
+**Sistema de archivos**
+14. Duplicidad de rutas de servidores (`/tmp/cubed-dev/servers` vs
+    `~/.local/share/dev.cubed.app/servers`).
+15. Dos fuentes de verdad para un mismo servidor (archivos en una ruta,
+    ejecución en otra).
+16. Configuraciones inconsistentes entre rutas (módulos apuntando a ubicaciones
+    distintas).
+
+**Mods**
+17. Solicitud manual de rutas absolutas al usuario.
+18. Falta de selector de archivos nativo.
+19. Mods instalados en la ubicación incorrecta (no llegaban al servidor real).
+20. Sincronización rota de mods (instalación aparente correcta, mods ausentes
+    al iniciar).
+
+**Modpacks**
+21. Modpacks bloqueados en "Preparando" (nunca terminaban de importar).
+22. Falta de progreso visual durante el procesamiento.
+23. Manejo deficiente de errores (fallos silenciosos).
+24. Lectura incorrecta de manifests (problemas en la importación).
+25. Extracción incompleta de paquetes (archivos no procesados correctamente).
+
+**Importación de ZIP**
+26. Importación indiscriminada (copiaba `world/`, `logs/`, `backups/`,
+    `crash-reports/` innecesariamente).
+27. Falta de análisis inteligente del ZIP (no identificaba `mods/`, `config/`,
+    `kubejs/`, `defaultconfigs/`).
+
+**Dashboard y monitoreo**
+28. Métricas de red incorrectas (valores absurdos o inconsistentes).
+29. Falta de uptime del sistema.
+30. Falta de carga promedio del sistema.
+31. Estados incorrectos de servidores (no sincronizados con el backend).
+
+**Sistema de backups**
+32. Frecuencia fija de respaldos (no configurable desde la interfaz).
+33. Falta de validación numérica (posibilidad de valores inválidos).
+34. Error de infraestructura con `tar` (`tar terminó con código Some(2)`).
+35. Creación de backups fallida (los respaldos no se generaban correctamente).
+
+**Versionado**
+36. Versión incorrecta mostrada (v0.8.0 en lugar de v1.0.0).
+37. Múltiples fuentes de versión (`package.json`, `Cargo.toml`, Tauri, UI).
+
+**Arquitectura y estado interno**
+38. Código muerto.
+39. Estados imposibles (backend y frontend mostrando estados distintos).
+40. Problemas potenciales en tareas asíncronas (Modpacks y Server Manager).
+41. Riesgos de concurrencia en gestión de procesos y estados.
+
+**Identidad visual**
+42. Ausencia de logo.
+43. Falta de branding.
+44. Tema visual inconsistente.
+45. Ausencia de diseño distintivo.
+
+**Integración y despliegue**
+46. Riesgo de instalaciones mezcladas (builds antiguas convivendo con nuevas).
+47. Directorios huérfanos.
+48. Configuraciones obsoletas.
+
+**Sincronización frontend ↔ backend**
+49. Transición STARTING → RUNNING rota (backend correcto, UI no actualizaba).
+50. Botones dependientes de estados obsoletos (acciones incorrectas en UI).
+51. Dashboard no reflejaba servidores activos (información desactualizada).
+
+### v1.0.1 – v1.0.3 — Estabilización post-lanzamiento
+- Robustez de arranque: resolución de Java con fallback a autodetección si el
+  `java_path` guardado deja de resolver (ver §17.4).
+- Corrección del flujo EULA/`--nogui` que causaba arranque y caída inmediata
+  (ver §17.3).
+- Unificación de rutas: introducción de `work_dir` en `ServerDto` como única
+  fuente de verdad para Mods, Backups, Modpacks y creación de servidores
+  (ver §17.5).
+- Introducción de límites de RAM (4–12 GB) validados en frontend, al guardar
+  Settings y al arrancar el servidor (ver §17.6).
+
+### v1.0.4 — Estabilidad de CI
+- `clippy::manual_range_contains` en `Settings::validate_memory_mb`: comparación
+  manual reemplazada por `(MIN..=MAX).contains(&mb)`.
+- `clippy::question_mark` en `commands.rs`: patrón `if let Err(e) = ... { return
+  Err(e); }` reemplazado por el operador `?`.
+- Formato Prettier en `CreateServerModal.tsx` (cadena de promesas reformateada).
+
+### v1.0.5 — Estado y backups estables
+- Eliminado el fallback a ruta legacy de `servers_dir` en `CreateServerModal`
+  (ver §17.7): el directorio se obtiene siempre de Settings, sin valor por
+  defecto local que pudiera desincronizarse.
+- Endurecida la reconciliación de estado de servidores y la generación de
+  backups (`commands.rs`, `file_backup_manager.rs`, `App.tsx`) para eliminar
+  condiciones de carrera entre el proceso real y el estado mostrado en la UI
+  (ver §17.8).
+
+### Estado actual (v1.0.5)
+- ✅ Creación de servidores
+- ✅ Persistencia
+- ✅ Gestión automática de puertos
+- ✅ Detección de Java
+- ✅ Inicio y detención de servidores
+- ✅ Consola en tiempo real
+- ✅ Gestión de mods
+- ✅ Gestión de modpacks
+- ✅ Dashboard
+- ✅ Monitoreo de recursos
+- ✅ Backups
+- ✅ Restauración
+- ✅ Tailscale
+- ✅ Branding
+- ✅ Sincronización frontend/backend
+- ✅ Integración Git
+- ✅ Versión 1.0.5 estable
